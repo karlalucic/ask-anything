@@ -42,7 +42,7 @@ export default async function ListenPage({ params }: { params: Promise<{ id: str
         <div className="mb-10">
           <h1 className="text-2xl font-normal leading-snug text-white">{generation.title ?? generation.topic}</h1>
           <p className="text-sm text-white/40 mt-1">
-            {generation.duration === "short" ? "5 min" : generation.duration === "medium" ? "20 min" : "60 min"} ·{" "}
+            {generation.duration} min ·{" "}
             {generation.familiarity} · {generation.intent.replace("_", " ")}
           </p>
         </div>

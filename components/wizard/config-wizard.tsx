@@ -54,7 +54,7 @@ export function ConfigWizard() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("meta");
   const [form, setForm] = useState<FormState>({
-    topic: "", duration: "medium", familiarity: "intermediate", intent: "curious",
+    topic: "", duration: 20, familiarity: "intermediate", intent: "curious",
     styleInput: "", styleCard: null, styleFollowups: [], followupAnswers: [],
     sourcesConfig: DEFAULT_SOURCES, voice: "ara",
   });
