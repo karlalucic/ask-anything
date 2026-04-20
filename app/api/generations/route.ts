@@ -1,0 +1,102 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { tasks } from "@trigger.dev/sdk/v3";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { toGeneration } from "@/lib/supabase/mappers";
+import type { generateAudiobook } from "@/trigger/generate-audiobook";
+
+const bodySchema = z.object({
+  topic: z.string().min(1).max(500),
+  duration: z.number().int().min(5).max(90),
+  familiarity: z.enum(["beginner", "intermediate", "advanced"]),
+  intent: z.enum(["curious", "work", "comparing", "deep_dive"]),
+  voice: z.enum(["eve", "ara", "rex", "sal", "leo"]),
+  styleInput: z.string().min(1).max(200),
+  styleCard: z.object({
+    openingPattern: z.string(),
+    chapterShape: z.string(),
+    sentenceRhythm: z.string(),
+    signatureMoves: z.array(z.string()),
+    targetWordCountRange: z.tuple([z.number(), z.number()]),
+  }),
+  styleFollowups: z.array(z.object({ q: z.string(), a: z.string() })).optional(),
+  sourcesConfig: z.object({
+    web: z.boolean(),
+    academic: z.boolean(),
+    userDocs: z.boolean(),
+    recency: z.enum(["any", "past_year", "past_month", "past_week"]),
+    domains: z.array(z.string()),
+    userDocIds: z.array(z.string()),
+  }),
+});
+
+export async function POST(req: NextRequest) {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await req.json();
+  const parsed = bodySchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+
+  const { data: row, error } = await supabase
+    .from("generations")
+    .insert({
+      user_id: user.id,
+      title: parsed.data.topic,
+      topic: parsed.data.topic,
+      duration: parsed.data.duration,
+      familiarity: parsed.data.familiarity,
+      intent: parsed.data.intent,
+      voice: parsed.data.voice,
+      style_input: parsed.data.styleInput,
+      style_card: parsed.data.styleCard,
+      style_followups: parsed.data.styleFollowups ?? [],
+      sources_config: parsed.data.sourcesConfig,
+      status: "queued",
+    })
+    .select("id")
+    .single();
+
+  if (error || !row) {
+    return NextResponse.json({ error: "Failed to create generation" }, { status: 500 });
+  }
+
+  const handle = await tasks.trigger<typeof generateAudiobook>("generate-audiobook", {
+    generationId: row.id,
+    userId: user.id,
+    topic: parsed.data.topic,
+    duration: parsed.data.duration,
+    familiarity: parsed.data.familiarity,
+    intent: parsed.data.intent,
+    voice: parsed.data.voice,
+    styleCard: parsed.data.styleCard,
+    sourcesConfig: parsed.data.sourcesConfig,
+  });
+
+  await supabase.from("generations").update({ trigger_run_id: handle.id }).eq("id", row.id);
+
+  const response = NextResponse.json({ id: row.id });
+  response.headers.set("X-Generation-Id", row.id);
+  return response;
+}
+
+export async function GET(req: NextRequest) {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(req.url);
+  const limit = Math.min(parseInt(searchParams.get("limit") ?? "20"), 50);
+  const offset = parseInt(searchParams.get("offset") ?? "0");
+
+  const { data, error } = await supabase
+    .from("generations")
+    .select("id, title, topic, duration, status, stage_progress, audio_path, audio_duration_seconds, error, created_at, completed_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ generations: (data ?? []).map(toGeneration) });
+}

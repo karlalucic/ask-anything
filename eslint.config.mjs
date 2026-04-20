@@ -9,8 +9,11 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".trigger/**",
     "out/**",
     "build/**",
+    "Bartlett Design System/**",
+    "Bartlett Design System-2/**",
     "next-env.d.ts",
   ]),
 ]);

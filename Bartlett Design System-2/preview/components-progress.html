@@ -1,0 +1,36 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Card</title>
+<style>
+  html,body{margin:0;padding:0;background:#fff;font-family:'Inter',sans-serif}
+  .card{padding:24px 32px;display:flex;flex-direction:column;gap:18px}
+  .strip{display:flex;align-items:center;gap:0}
+  .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .d-done{background:#0A0A0A}
+  .d-active{background:#0A0A0A;animation:p 2s infinite}
+  .d-pending{background:#E5E5E5}
+  .line{flex:1;height:1px}
+  .l-done{background:#0A0A0A}
+  .l-pending{background:#E5E5E5}
+  @keyframes p{0%,100%{opacity:1}50%{opacity:.35}}
+  .meta{font-size:13px;color:#737373}
+  .chapters{display:flex;flex-direction:column;gap:8px;margin-top:2px}
+  .chap{display:flex;align-items:center;gap:10px;font-size:13px;color:#0A0A0A}
+  .cd{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+</style></head>
+<body>
+<div class="card">
+  <div class="strip">
+    <span class="dot d-done"></span><span class="line l-done"></span>
+    <span class="dot d-done"></span><span class="line l-done"></span>
+    <span class="dot d-active"></span><span class="line l-pending"></span>
+    <span class="dot d-pending"></span><span class="line l-pending"></span>
+    <span class="dot d-pending"></span>
+  </div>
+  <div class="meta">Drafting · 3/8 chapters</div>
+  <div class="chapters">
+    <div class="chap"><span class="cd d-done"></span>A brief prehistory</div>
+    <div class="chap"><span class="cd d-active"></span>The VOC as a joint-stock experiment</div>
+    <div class="chap"><span class="cd d-pending"></span>Amsterdam's bourse</div>
+  </div>
+</div>
+</body></html>

@@ -1,0 +1,20 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Card</title>
+<style>
+  html,body{margin:0;padding:0;background:#fff;font-family:'Inter',sans-serif}
+  .card{padding:24px 32px;display:flex;flex-direction:column;gap:14px}
+  .row{display:flex;align-items:center;gap:14px}
+  .swatch{width:56px;height:56px;border-radius:10px;flex-shrink:0;border:1px solid rgba(0,0,0,0.06)}
+  .meta{display:flex;flex-direction:column;gap:2px}
+  .name{font-size:13px;font-weight:500;color:#0A0A0A}
+  .hex{font-size:11px;color:#a3a3a3;font-family:ui-monospace,Menlo,monospace;letter-spacing:.02em}
+  .role{font-size:11px;color:#737373;margin-left:auto}
+</style></head>
+<body>
+<div class="card">
+  <div class="row"><div class="swatch" style="background:#FFFFFF"></div><div class="meta"><div class="name">Background</div><div class="hex">#FFFFFF · 0 0% 100%</div></div><div class="role">Page base</div></div>
+  <div class="row"><div class="swatch" style="background:#0A0A0A"></div><div class="meta"><div class="name">Foreground</div><div class="hex">#0A0A0A · 0 0% 4%</div></div><div class="role">Body + primary</div></div>
+  <div class="row"><div class="swatch" style="background:#737373"></div><div class="meta"><div class="name">Muted fg</div><div class="hex">#737373 · 0 0% 45%</div></div><div class="role">Metadata</div></div>
+  <div class="row"><div class="swatch" style="background:#F7F7F7"></div><div class="meta"><div class="name">Muted</div><div class="hex">#F7F7F7 · 0 0% 97%</div></div><div class="role">Surface</div></div>
+</div>
+</body></html>

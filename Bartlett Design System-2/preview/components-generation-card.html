@@ -1,0 +1,34 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Card</title>
+<style>
+  html,body{margin:0;padding:0;background:#fff;font-family:'Inter',sans-serif}
+  .card{padding:24px 32px;display:flex;flex-direction:column;gap:12px}
+  .gen{border:1px solid #F5F5F5;border-radius:12px;padding:14px 20px;display:flex;align-items:center;transition:all 150ms;cursor:pointer}
+  .gen:hover{border-color:#D4D4D4;background:rgba(245,245,245,0.5)}
+  .l{flex:1;min-width:0}
+  .title{font-size:14px;font-weight:500;color:#0A0A0A;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .meta{font-size:12px;color:#A3A3A3}
+  .badge{display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:9999px;font-size:11px;font-weight:500}
+  .b-done{background:#0A0A0A;color:#fff}
+  .b-active{border:1px solid #E5E5E5;color:#525252;background:#fff}
+  .dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:#0A0A0A;margin-right:6px;vertical-align:middle;animation:p 2s infinite}
+  @keyframes p{0%,100%{opacity:1}50%{opacity:.4}}
+</style></head>
+<body>
+<div class="card">
+  <div class="gen">
+    <div class="l">
+      <div class="title">The physics of fermentation</div>
+      <div class="meta">Apr 12 · 18 min</div>
+    </div>
+    <div class="badge b-done">complete</div>
+  </div>
+  <div class="gen">
+    <div class="l">
+      <div class="title">How central banks actually set rates</div>
+      <div class="meta"><span class="dot"></span>In progress</div>
+    </div>
+    <div class="badge b-active">drafting</div>
+  </div>
+</div>
+</body></html>
