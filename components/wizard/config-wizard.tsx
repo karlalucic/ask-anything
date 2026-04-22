@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { FamiliarityLevel, IntentType, VoiceId, StyleCard, SourcesConfig } from "@/lib/types";
+import type { FamiliarityLevel, IntentType, VoiceId, StyleCard, StyleFollowup, SourcesConfig } from "@/lib/types";
 import { VOICE_LABELS } from "@/lib/types";
 import { Slider } from "@/components/ui/slider";
 
@@ -20,7 +20,7 @@ interface FormState {
   intent: IntentType;
   styleInput: string;
   styleCard: StyleCard | null;
-  styleFollowups: { q: string; a: string }[];
+  styleFollowups: StyleFollowup[];
   followupAnswers: string[];
   sourcesConfig: SourcesConfig;
   voice: VoiceId;
@@ -80,7 +80,9 @@ export function ConfigWizard() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed");
       update("styleCard", json.styleCard);
-      update("styleFollowups", json.followups?.map((q: string) => ({ q, a: "" })) ?? []);
+      update("styleFollowups", json.followups?.map((f: { q: string; options?: string[] } | string) =>
+        typeof f === "string" ? { q: f, a: "", options: [] } : { q: f.q, a: "", options: f.options ?? [] }
+      ) ?? []);
       update("followupAnswers", Array(json.followups?.length ?? 0).fill(""));
     } catch (e: unknown) {
       setStyleError((e as Error).message);
@@ -274,21 +276,27 @@ export function ConfigWizard() {
               </div>
 
               {form.styleFollowups.length > 0 && (
-                <div className="space-y-4">
+                <div className="space-y-5">
                   <p className="text-sm font-medium text-white/70">A few questions to sharpen the style:</p>
                   {form.styleFollowups.map((f, i) => (
                     <div key={i}>
                       <Label className="text-sm text-white/50">{f.q}</Label>
-                      <Input
-                        value={form.followupAnswers[i] ?? ""}
-                        onChange={(e) => {
-                          const updated = [...form.followupAnswers];
-                          updated[i] = e.target.value;
-                          update("followupAnswers", updated);
-                        }}
-                        className="mt-1"
-                        placeholder="Your answer"
-                      />
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {(f.options ?? []).map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => {
+                              const updated = [...form.followupAnswers];
+                              updated[i] = opt;
+                              update("followupAnswers", updated);
+                            }}
+                            className={pillClass(form.followupAnswers[i] === opt, "py-1.5")}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ))}
                   <Button variant="outline" size="sm" onClick={refineStyleCard} disabled={styleLoading}>

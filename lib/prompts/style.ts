@@ -24,11 +24,13 @@ Respond with valid JSON matching this schema exactly:
     "targetWordCountRange": [minWords, maxWords]
   },
   "followups": [
-    "Question 1 that would sharpen the style card",
-    "Question 2",
-    "Question 3 (optional)"
+    { "q": "Short question?", "options": ["Option A", "Option B", "Option C"] },
+    { "q": "Short question?", "options": ["Option A", "Option B", "Option C"] },
+    { "q": "Short question? (optional)", "options": ["Option A", "Option B", "Option C"] }
   ]
-}`;
+}
+
+Keep options short (2–5 words each). Make them meaningfully distinct so the choice actually sharpens the style card.`;
 }
 
 export function buildStyleRefinePrompt(params: {

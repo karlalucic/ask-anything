@@ -25,6 +25,7 @@ export interface StyleCard {
 export interface StyleFollowup {
   q: string;
   a: string;
+  options?: string[];
 }
 
 export interface SourcesConfig {

@@ -61,7 +61,7 @@ export default async function ListenPage({ params }: { params: Promise<{ id: str
           </div>
         )}
 
-        {generation.status === "failed" && (
+        {(generation.status === "failed" || generation.status === "queued") && (
           <div className="flex gap-3 mt-6">
             <form action={`/api/generations/${id}/cancel`} method="post">
               <Button variant="ghost" size="sm" type="submit">Dismiss</Button>

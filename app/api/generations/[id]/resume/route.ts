@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { toGeneration } from "@/lib/supabase/mappers";
 import type { generateAudiobook } from "@/trigger/generate-audiobook";
 
-const RESUMABLE_STATUSES = ["failed", "canceled"];
+const RESUMABLE_STATUSES = ["failed", "canceled", "queued"];
 
 function wantsHtml(req: NextRequest): boolean {
   return req.headers.get("accept")?.includes("text/html") ?? false;
