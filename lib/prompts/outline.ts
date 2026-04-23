@@ -51,7 +51,16 @@ Return a JSON array of ${chapterCount} chapter objects. No prose outside the JSO
 }
 
 export function parseOutlineResponse(raw: string): ChapterPlan[] {
-  const match = raw.match(/\[[\s\S]*\]/);
-  if (!match) throw new Error("Outline response contained no JSON array");
-  return JSON.parse(match[0]) as ChapterPlan[];
+  const stripped = raw.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+  const start = stripped.indexOf("[");
+  const end = stripped.lastIndexOf("]");
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error(`Outline response contained no JSON array (length=${raw.length}, head=${raw.slice(0, 200)})`);
+  }
+  const jsonSlice = stripped.slice(start, end + 1);
+  try {
+    return JSON.parse(jsonSlice) as ChapterPlan[];
+  } catch (err) {
+    throw new Error(`Outline JSON parse failed: ${(err as Error).message}. Slice head: ${jsonSlice.slice(0, 200)}`);
+  }
 }
