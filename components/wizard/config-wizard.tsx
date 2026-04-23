@@ -131,7 +131,10 @@ export function ConfigWizard() {
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Failed to start generation");
+      if (!res.ok) {
+        const msg = typeof json.error === "string" ? json.error : JSON.stringify(json.error);
+        throw new Error(msg || "Failed to start generation");
+      }
       router.push(`/listen/${json.id}`);
     } catch (e: unknown) {
       setGenError((e as Error).message);

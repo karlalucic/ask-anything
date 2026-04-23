@@ -37,7 +37,12 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const parsed = bodySchema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  if (!parsed.success) {
+    const message = parsed.error.issues
+      .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+      .join("; ");
+    return NextResponse.json({ error: `Invalid request: ${message}` }, { status: 400 });
+  }
 
   const { data: row, error } = await supabase
     .from("generations")
