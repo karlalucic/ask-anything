@@ -3,7 +3,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { buildResearchSystemPrompt, buildResearchUserPrompt, RESEARCH_TOOLS } from "../lib/prompts/research";
 import { setChapterStatus, logRunEvent } from "../lib/supabase/progress";
-import { BartlettError, truncateForStorage } from "../lib/errors";
+import { recordProviderUsage } from "../lib/usage/record";
+import { AppError, truncateForStorage } from "../lib/errors";
 import { normalizeChapterResearch } from "../lib/research";
 import type { ChapterPlan, ChapterResearch } from "../lib/types";
 
@@ -13,8 +14,8 @@ export const chapterResearch = task({
   id: "chapter-research",
   queue: { name: "chapter-research", concurrencyLimit: 2 },
   maxDuration: 600,
-  run: async (payload: { generationId: string; chapterIdx: number; chapter: ChapterPlan }) => {
-    const { generationId, chapterIdx, chapter } = payload;
+  run: async (payload: { generationId: string; userId?: string; chapterIdx: number; chapter: ChapterPlan }) => {
+    const { generationId, userId, chapterIdx, chapter } = payload;
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -45,6 +46,7 @@ export const chapterResearch = task({
     const startTime = Date.now();
 
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+      const iterStart = Date.now();
       await logRunEvent({
         generationId,
         chapterIdx,
@@ -75,7 +77,7 @@ export const chapterResearch = task({
           attempt: iteration + 1,
           error: truncateForStorage({ status: errObj.status, message: errObj.message }),
         });
-        throw new BartlettError(
+        throw new AppError(
           {
             stage: "research",
             provider: "anthropic",
@@ -92,6 +94,27 @@ export const chapterResearch = task({
         );
       }
 
+      const toolUseCount = response.content.filter((b) => b.type === "tool_use").length;
+      const webSearchRequests = response.usage.server_tool_use?.web_search_requests ?? 0;
+
+      // Record usage FIRST — provider has charged us; row must exist even if logRunEvent
+      // (or anything downstream) fails.
+      await recordProviderUsage({
+        generationId,
+        userId,
+        chapterIdx,
+        stage: "research",
+        provider: "anthropic",
+        model: "claude-sonnet-4-6",
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        cachedInputTokens: response.usage.cache_read_input_tokens ?? 0,
+        cacheCreationInputTokens: response.usage.cache_creation_input_tokens ?? 0,
+        toolCalls: toolUseCount,
+        webSearchRequests,
+        durationMs: Date.now() - iterStart,
+        attempt: iteration + 1,
+      });
       await logRunEvent({
         generationId,
         chapterIdx,
@@ -104,7 +127,8 @@ export const chapterResearch = task({
           stopReason: response.stop_reason,
           inputTokens: response.usage.input_tokens,
           outputTokens: response.usage.output_tokens,
-          toolUseCount: response.content.filter((b) => b.type === "tool_use").length,
+          toolUseCount,
+          webSearchRequests,
         },
       });
 
@@ -149,7 +173,7 @@ export const chapterResearch = task({
     }
 
     if (!research) {
-      throw new BartlettError(
+      throw new AppError(
         {
           stage: "research",
           provider: "anthropic",

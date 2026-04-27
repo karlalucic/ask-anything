@@ -7,7 +7,7 @@ export const logger = pino({
       return { level: label };
     },
   },
-  base: { service: "bartlett" },
+  base: { service: "ask-anything" },
 });
 
 export function childLogger(ctx: Record<string, unknown>) {

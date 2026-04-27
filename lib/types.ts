@@ -58,7 +58,7 @@ export interface StageProgress {
   tts?: { done: number; total: number };
 }
 
-export interface BartlettErrorInfo {
+export interface AppErrorInfo {
   stage: "outline" | "research" | "draft" | "aggregate" | "tts" | "stitch" | "storage" | "style";
   provider: "anthropic" | "xai" | "ffmpeg" | "supabase" | "internal";
   code: string;
@@ -92,7 +92,7 @@ export interface Generation {
   audioDurationSeconds: number | null;
   status: GenerationStatus;
   stageProgress: StageProgress;
-  error: BartlettErrorInfo | null;
+  error: AppErrorInfo | null;
   triggerRunId: string | null;
   createdAt: string;
   completedAt: string | null;
@@ -110,7 +110,7 @@ export interface Chapter {
   research: ChapterResearch | null;
   draft: string | null;
   status: "pending" | "researching" | "drafting" | "done" | "failed";
-  error: BartlettErrorInfo | null;
+  error: AppErrorInfo | null;
   updatedAt: string;
 }
 

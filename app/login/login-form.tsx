@@ -61,7 +61,7 @@ export default function LoginForm() {
       <main className="flex flex-1 items-center justify-center px-6 py-16">
         <div className="liquid-glass mx-auto w-full max-w-sm rounded-2xl p-10">
           <div className="mb-8 text-center">
-            <Link href="/" className="font-display text-4xl font-normal text-white">Bartlett</Link>
+            <Link href="/" className="font-display text-4xl font-normal text-white">ask anything</Link>
             <p className="mt-3 text-sm text-white/40">Welcome back.</p>
           </div>
 

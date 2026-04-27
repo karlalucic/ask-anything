@@ -31,8 +31,54 @@ export default async function HomePage() {
 function LoggedOutLanding() {
   return (
     <>
-      <PageHero
-        nav={
+      <HeroSection />
+      <EditorialSection />
+    </>
+  );
+}
+
+function LoggedInHome() {
+  return (
+    <section className="relative min-h-screen overflow-hidden bg-black">
+      <HeroBackdrop />
+      <div className="relative z-10">
+        <SiteNav>
+          <>
+            <Link href="/library" className="text-sm text-white/70 transition-colors duration-150 hover:text-white">
+              Library
+            </Link>
+            <Link href="/new" className={cn(buttonVariants({ size: "sm" }))}>
+              New briefing
+            </Link>
+          </>
+        </SiteNav>
+      </div>
+      <div className="relative z-10 mx-auto flex min-h-[calc(100svh-88px)] max-w-6xl flex-col justify-center gap-12 px-6 py-14 lg:flex-row lg:items-center lg:py-20">
+        <div className="flex-1 min-w-0">
+          <h1 className="max-w-4xl text-6xl font-normal leading-[1.03] tracking-tight text-white md:text-8xl">
+            <span className="block">Ask anything.</span>
+            <em className="mt-2 block not-italic text-white/50">Know everything.</em>
+          </h1>
+          <div className="mt-12 flex flex-col gap-3 sm:flex-row">
+            <Link href="/new" className={cn(buttonVariants({ size: "lg" }))}>
+              New briefing
+            </Link>
+            <Link href="/library" className={cn(buttonVariants({ variant: "outline", size: "lg" }))}>
+              Open library
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HeroSection() {
+  return (
+    <section className="relative min-h-screen overflow-hidden bg-black">
+      <HeroBackdrop />
+      <div className="relative z-10">
+        <SiteNav>
           <>
             <Link href="/login" className="text-sm text-white/70 transition-colors duration-150 hover:text-white">
               Sign in
@@ -41,105 +87,32 @@ function LoggedOutLanding() {
               Get started
             </Link>
           </>
-        }
-        eyebrow="Bartlett"
-        title="Any topic."
-        accent="Narrated in minutes."
-        description="Type a subject, choose how deep to go, and receive a polished audio briefing with the shape and pace of a real editorial podcast."
-        primaryHref="/signup"
-        primaryLabel="Get started free"
-        secondaryHref="/login"
-        secondaryLabel="Sign in"
-      >
-        <PromptGlassPanel />
-      </PageHero>
-      <EditorialSection />
-    </>
-  );
-}
-
-function LoggedInHome() {
-  return (
-    <PageHero
-      nav={
-        <>
-          <Link href="/library" className="text-sm text-white/70 transition-colors duration-150 hover:text-white">
-            Library
-          </Link>
-          <Link href="/new" className={cn(buttonVariants({ size: "sm" }))}>
-            New briefing
-          </Link>
-        </>
-      }
-      eyebrow="Home"
-      title="Any topic."
-      accent="Narrated in minutes."
-      hideCtas
-    >
-      <div className="flex flex-col gap-3">
-        <Link href="/new" className={cn(buttonVariants({ size: "lg", className: "w-full" }))}>
-          New briefing
-        </Link>
-        <Link href="/library" className={cn(buttonVariants({ variant: "outline", size: "lg", className: "w-full" }))}>
-          Open library
-        </Link>
+        </SiteNav>
       </div>
-    </PageHero>
-  );
-}
 
-function PageHero({
-  nav,
-  eyebrow,
-  title,
-  accent,
-  description,
-  primaryHref,
-  primaryLabel,
-  secondaryHref,
-  secondaryLabel,
-  hideCtas,
-  children,
-}: {
-  nav: ReactNode;
-  eyebrow: string;
-  title: string;
-  accent: string;
-  description?: string;
-  primaryHref?: string;
-  primaryLabel?: string;
-  secondaryHref?: string;
-  secondaryLabel?: string;
-  hideCtas?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <section className="relative min-h-screen overflow-hidden bg-black">
-      <HeroBackdrop />
-      <div className="relative z-10">
-        <SiteNav>{nav}</SiteNav>
-      </div>
       <div className="relative z-10 mx-auto flex min-h-[calc(100svh-88px)] max-w-6xl flex-col justify-center gap-12 px-6 py-14 lg:flex-row lg:items-center lg:py-20">
+        {/* Left: headline + CTAs */}
         <div className="flex-1 min-w-0">
-          <p className="mb-6 text-xs font-medium uppercase tracking-[0.28em] text-white/40">{eyebrow}</p>
           <h1 className="max-w-4xl text-6xl font-normal leading-[1.03] tracking-tight text-white md:text-8xl">
-            <span className="block">{title}</span>
-            <em className="mt-2 block not-italic text-white/50">{accent}</em>
+            <span className="block">Ask anything.</span>
+            <em className="mt-2 block not-italic text-white/50">Know everything.</em>
           </h1>
-          {description && <p className="mt-8 max-w-2xl text-lg leading-relaxed text-white/60">{description}</p>}
-          {!hideCtas && primaryHref && secondaryHref && (
-            <div className="mt-12 flex flex-wrap items-center gap-3">
-              <Link href={primaryHref} className={cn(buttonVariants({ size: "lg" }))}>
-                {primaryLabel}
-              </Link>
-              <Link href={secondaryHref} className={cn(buttonVariants({ variant: "outline", size: "lg" }))}>
-                {secondaryLabel}
-              </Link>
-            </div>
-          )}
+          <p className="mt-8 max-w-lg text-lg leading-relaxed text-white/50">
+            Type a subject, choose how deep to go, and receive a polished audio briefing shaped like a real editorial podcast.
+          </p>
+          <div className="mt-12 flex flex-wrap items-center gap-3">
+            <Link href="/signup" className={cn(buttonVariants({ size: "lg" }))}>
+              Get started free
+            </Link>
+            <Link href="/login" className={cn(buttonVariants({ variant: "outline", size: "lg" }))}>
+              Sign in
+            </Link>
+          </div>
         </div>
+
+        {/* Right: glass preview panel */}
         <div className="w-full lg:w-[420px] lg:shrink-0">
-          {children}
+          <PromptGlassPanel />
         </div>
       </div>
     </section>
@@ -199,7 +172,7 @@ function EditorialSection() {
             A briefing should sound finished before it reaches your ears.
           </h2>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-white/50">
-            Choose a voice, a length, and a house style. Bartlett turns the raw question into chapters, narration, and a listenable arc.
+            Choose a voice, a length, and a house style. We turn your question into chapters, narration, and a listenable arc.
           </p>
         </div>
         <div className="liquid-glass rounded-2xl p-3">

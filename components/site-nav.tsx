@@ -6,7 +6,7 @@ export function SiteNav({ children, minimal = false }: { children?: ReactNode; m
     <header className="px-6 pt-6">
       <div className="liquid-glass mx-auto flex max-w-6xl items-center justify-between rounded-full px-6 py-3">
         <Link href="/" className="font-display text-xl font-normal text-white">
-          Bartlett
+          ask anything
         </Link>
         {children ? (
           <div className="flex items-center gap-4">{children}</div>

@@ -3,7 +3,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { buildDraftPrompt } from "../lib/prompts/draft";
 import { setChapterStatus, logRunEvent } from "../lib/supabase/progress";
-import { BartlettError, truncateForStorage } from "../lib/errors";
+import { recordProviderUsage } from "../lib/usage/record";
+import { AppError, truncateForStorage } from "../lib/errors";
 import { normalizeChapterResearch } from "../lib/research";
 import type { ChapterPlan, ChapterResearch, StyleCard } from "../lib/types";
 
@@ -13,13 +14,14 @@ export const chapterDraft = task({
   maxDuration: 600,
   run: async (payload: {
     generationId: string;
+    userId?: string;
     chapterIdx: number;
     chapter: ChapterPlan;
     research: ChapterResearch;
     styleCard: StyleCard;
     totalChapters: number;
   }) => {
-    const { generationId, chapterIdx, chapter, styleCard, totalChapters } = payload;
+    const { generationId, userId, chapterIdx, chapter, styleCard, totalChapters } = payload;
     const research = normalizeChapterResearch(payload.research);
 
     const supabase = createClient(
@@ -85,7 +87,7 @@ export const chapterDraft = task({
         attempt: 1,
         error: truncateForStorage({ status: errObj.status, message: errObj.message }),
       });
-      throw new BartlettError(
+      throw new AppError(
         {
           stage: "draft",
           provider: "anthropic",
@@ -102,8 +104,23 @@ export const chapterDraft = task({
       );
     }
 
+    // Record usage IMMEDIATELY — before any throwing logic (max_tokens check, downstream upload).
+    await recordProviderUsage({
+      generationId,
+      userId,
+      chapterIdx,
+      stage: "draft",
+      provider: "anthropic",
+      model: "claude-opus-4-7",
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cachedInputTokens: response.usage.cache_read_input_tokens ?? 0,
+      cacheCreationInputTokens: response.usage.cache_creation_input_tokens ?? 0,
+      durationMs: Date.now() - startTime,
+    });
+
     if (response.stop_reason === "max_tokens") {
-      throw new BartlettError(
+      throw new AppError(
         {
           stage: "draft",
           provider: "anthropic",

@@ -1,13 +1,13 @@
-import type { BartlettErrorInfo } from "./types";
+import type { AppErrorInfo } from "./types";
 
-export class BartlettError extends Error {
+export class AppError extends Error {
   constructor(
-    readonly info: BartlettErrorInfo,
+    readonly info: AppErrorInfo,
     message: string,
     cause?: unknown,
   ) {
     super(message, { cause });
-    this.name = "BartlettError";
+    this.name = "AppError";
   }
 
   toJSON() {
@@ -19,17 +19,17 @@ export class BartlettError extends Error {
   }
 }
 
-export function isBartlettError(e: unknown): e is BartlettError {
-  return e instanceof BartlettError;
+export function isAppError(e: unknown): e is AppError {
+  return e instanceof AppError;
 }
 
 /** Wraps a Supabase upsert/update/insert result and throws if no rows were affected. */
 export function assertWritten(
   data: unknown[] | null,
-  info: Omit<BartlettErrorInfo, "code" | "retriable">,
+  info: Omit<AppErrorInfo, "code" | "retriable">,
 ): void {
   if (!data || data.length === 0) {
-    throw new BartlettError(
+    throw new AppError(
       { ...info, code: "rls_denied", retriable: false },
       `Database write rejected (RLS or no match): ${info.stage}/${info.provider}`,
     );

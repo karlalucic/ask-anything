@@ -1,7 +1,8 @@
 import { task, logger } from "@trigger.dev/sdk/v3";
 import { createClient } from "@supabase/supabase-js";
-import { BartlettError, truncateForStorage } from "../lib/errors";
+import { AppError, truncateForStorage } from "../lib/errors";
 import { logRunEvent } from "../lib/supabase/progress";
+import { recordProviderUsage } from "../lib/usage/record";
 
 const XAI_TTS_URL = "https://api.x.ai/v1/tts";
 const MIN_CHUNK_BYTES = 1024;
@@ -12,11 +13,12 @@ export const ttsChunk = task({
   maxDuration: 300,
   run: async (payload: {
     generationId: string;
+    userId?: string;
     chunkIdx: number;
     text: string;
     voice: string;
   }) => {
-    const { generationId, chunkIdx, text, voice } = payload;
+    const { generationId, userId, chunkIdx, text, voice } = payload;
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -73,7 +75,7 @@ export const ttsChunk = task({
           attempt: 1,
           error: truncateForStorage({ status: response.status, body }),
         });
-        throw new BartlettError(
+        throw new AppError(
           {
             stage: "tts",
             provider: "xai",
@@ -90,8 +92,8 @@ export const ttsChunk = task({
 
       audioBuffer = await response.arrayBuffer();
     } catch (err: unknown) {
-      if (err instanceof BartlettError) throw err;
-      throw new BartlettError(
+      if (err instanceof AppError) throw err;
+      throw new AppError(
         {
           stage: "tts",
           provider: "xai",
@@ -105,8 +107,20 @@ export const ttsChunk = task({
       );
     }
 
+    // Record usage IMMEDIATELY — xAI has charged us for the synthesis even if
+    // the audio is undersized or upload fails downstream.
+    await recordProviderUsage({
+      generationId,
+      userId,
+      stage: "tts",
+      provider: "xai",
+      model: `xai-tts-${voice}`,
+      ttsCharacters: text.length,
+      durationMs: Date.now() - startTime,
+    });
+
     if (audioBuffer.byteLength < MIN_CHUNK_BYTES) {
-      throw new BartlettError(
+      throw new AppError(
         {
           stage: "tts",
           provider: "xai",
@@ -127,7 +141,7 @@ export const ttsChunk = task({
       });
 
     if (uploadError) {
-      throw new BartlettError(
+      throw new AppError(
         {
           stage: "tts",
           provider: "supabase",

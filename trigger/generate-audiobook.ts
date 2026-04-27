@@ -8,7 +8,8 @@ import * as os from "os";
 import { buildOutlinePrompt, parseOutlineResponse } from "../lib/prompts/outline";
 import { buildAggregatePrompt } from "../lib/prompts/aggregate";
 import { setGenerationStatus, bumpProgress, logRunEvent } from "../lib/supabase/progress";
-import { BartlettError, truncateForStorage } from "../lib/errors";
+import { recordProviderUsage } from "../lib/usage/record";
+import { AppError, truncateForStorage } from "../lib/errors";
 import { chapterResearch } from "./chapter-research";
 import { chapterDraft } from "./chapter-draft";
 import { ttsChunk } from "./tts-chunk";
@@ -92,15 +93,31 @@ export const generateAudiobook = task({
           });
         } catch (err: unknown) {
           const e = err as { status?: number; message?: string };
-          throw new BartlettError({ stage: "outline", provider: "anthropic", code: "api_error", upstreamStatus: e.status, attempt: 1, generationId, retriable: true }, `Outline failed: ${e.message}`, err as Error);
+          throw new AppError({ stage: "outline", provider: "anthropic", code: "api_error", upstreamStatus: e.status, attempt: 1, generationId, retriable: true }, `Outline failed: ${e.message}`, err as Error);
         }
+
+        // Record usage IMMEDIATELY — provider has already charged; row must exist
+        // even if downstream parse/upload throws.
+        await recordProviderUsage({
+          generationId,
+          userId,
+          stage: "outline",
+          provider: "anthropic",
+          model: "claude-sonnet-4-6",
+          inputTokens: outlineResponse.usage.input_tokens,
+          outputTokens: outlineResponse.usage.output_tokens,
+          cachedInputTokens: outlineResponse.usage.cache_read_input_tokens ?? 0,
+          cacheCreationInputTokens: outlineResponse.usage.cache_creation_input_tokens ?? 0,
+          webSearchRequests: outlineResponse.usage.server_tool_use?.web_search_requests ?? 0,
+          durationMs: Date.now() - outlineStart,
+        });
 
         const outlineText = outlineResponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
 
         try {
           chapters = parseOutlineResponse(outlineText);
         } catch (err: unknown) {
-          throw new BartlettError({ stage: "outline", provider: "anthropic", code: "schema_mismatch", attempt: 1, generationId, retriable: false }, "Failed to parse outline JSON", err as Error);
+          throw new AppError({ stage: "outline", provider: "anthropic", code: "schema_mismatch", attempt: 1, generationId, retriable: false }, "Failed to parse outline JSON", err as Error);
         }
 
         await logRunEvent({ generationId, stage: "outline", provider: "anthropic", kind: "call", attempt: 1, durationMs: Date.now() - outlineStart, response: { chapterCount: chapters.length } });
@@ -132,12 +149,13 @@ export const generateAudiobook = task({
       for (let i = 0; i < chapters.length; i++) {
         const result = await tasks.triggerAndWait<typeof chapterResearch>("chapter-research", {
           generationId,
+          userId,
           chapterIdx: i,
           chapter: chapters[i],
         });
 
         if (!result.ok) {
-          throw new BartlettError({ stage: "research", provider: "anthropic", code: "child_task_failed", attempt: 1, generationId, chapterIdx: i, retriable: true }, `Chapter ${i} research failed`);
+          throw new AppError({ stage: "research", provider: "anthropic", code: "child_task_failed", attempt: 1, generationId, chapterIdx: i, retriable: true }, `Chapter ${i} research failed`);
         }
         researchResults.push(result.output);
         await bumpProgress(generationId, "research", { done: i + 1, total: chapters.length });
@@ -152,6 +170,7 @@ export const generateAudiobook = task({
       for (let i = 0; i < chapters.length; i++) {
         const result = await tasks.triggerAndWait<typeof chapterDraft>("chapter-draft", {
           generationId,
+          userId,
           chapterIdx: i,
           chapter: chapters[i],
           research: researchResults[i],
@@ -160,7 +179,7 @@ export const generateAudiobook = task({
         });
 
         if (!result.ok) {
-          throw new BartlettError({ stage: "draft", provider: "anthropic", code: "child_task_failed", attempt: 1, generationId, chapterIdx: i, retriable: true }, `Chapter ${i} draft failed`);
+          throw new AppError({ stage: "draft", provider: "anthropic", code: "child_task_failed", attempt: 1, generationId, chapterIdx: i, retriable: true }, `Chapter ${i} draft failed`);
         }
         drafts.push(result.output);
         await bumpProgress(generationId, "drafting", { done: i + 1, total: chapters.length });
@@ -188,8 +207,23 @@ export const generateAudiobook = task({
         });
       } catch (err: unknown) {
         const e = err as { status?: number; message?: string };
-        throw new BartlettError({ stage: "aggregate", provider: "anthropic", code: "api_error", upstreamStatus: e.status, attempt: 1, generationId, retriable: true }, `Aggregation failed: ${e.message}`, err as Error);
+        throw new AppError({ stage: "aggregate", provider: "anthropic", code: "api_error", upstreamStatus: e.status, attempt: 1, generationId, retriable: true }, `Aggregation failed: ${e.message}`, err as Error);
       }
+
+      // Record usage IMMEDIATELY (before extract/upload).
+      await recordProviderUsage({
+        generationId,
+        userId,
+        stage: "aggregate",
+        provider: "anthropic",
+        model: "claude-sonnet-4-6",
+        inputTokens: aggResponse.usage.input_tokens,
+        outputTokens: aggResponse.usage.output_tokens,
+        cachedInputTokens: aggResponse.usage.cache_read_input_tokens ?? 0,
+        cacheCreationInputTokens: aggResponse.usage.cache_creation_input_tokens ?? 0,
+        webSearchRequests: aggResponse.usage.server_tool_use?.web_search_requests ?? 0,
+        durationMs: Date.now() - aggStart,
+      });
 
       const fullScript = aggResponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
 
@@ -207,13 +241,14 @@ export const generateAudiobook = task({
       for (let i = 0; i < chunks.length; i++) {
         const result = await tasks.triggerAndWait<typeof ttsChunk>("tts-chunk", {
           generationId,
+          userId,
           chunkIdx: i,
           text: chunks[i],
           voice,
         });
 
         if (!result.ok) {
-          throw new BartlettError({ stage: "tts", provider: "xai", code: "child_task_failed", attempt: 1, generationId, retriable: true }, `TTS chunk ${i} failed`);
+          throw new AppError({ stage: "tts", provider: "xai", code: "child_task_failed", attempt: 1, generationId, retriable: true }, `TTS chunk ${i} failed`);
         }
         chunkPaths.push(result.output);
         await bumpProgress(generationId, "tts", { done: i + 1, total: chunks.length });
@@ -228,7 +263,7 @@ export const generateAudiobook = task({
           .from("tts-chunks")
           .download(chunkPaths[i]);
         if (error || !data) {
-          throw new BartlettError({ stage: "stitch", provider: "supabase", code: "download_failed", attempt: 1, generationId, retriable: true }, `Failed to download chunk ${i}: ${error?.message}`);
+          throw new AppError({ stage: "stitch", provider: "supabase", code: "download_failed", attempt: 1, generationId, retriable: true }, `Failed to download chunk ${i}: ${error?.message}`);
         }
         const localPath = path.join(tmpDir, `${i}.mp3`);
         fs.writeFileSync(localPath, Buffer.from(await data.arrayBuffer()));
@@ -247,7 +282,7 @@ export const generateAudiobook = task({
         });
       } catch (err: unknown) {
         const e = err as { stderr?: string };
-        throw new BartlettError({ stage: "stitch", provider: "ffmpeg", code: "concat_failed", upstreamBody: truncateForStorage(e.stderr), attempt: 1, generationId, retriable: true }, `ffmpeg concat failed: ${e.stderr}`, err as Error);
+        throw new AppError({ stage: "stitch", provider: "ffmpeg", code: "concat_failed", upstreamBody: truncateForStorage(e.stderr), attempt: 1, generationId, retriable: true }, `ffmpeg concat failed: ${e.stderr}`, err as Error);
       }
 
       // Get duration
@@ -269,7 +304,7 @@ export const generateAudiobook = task({
         .upload(audioPath, audioBuffer, { contentType: "audio/mpeg", upsert: true });
 
       if (audioUploadError) {
-        throw new BartlettError({ stage: "storage", provider: "supabase", code: "upload_failed", attempt: 1, generationId, retriable: true }, `Failed to upload final audio: ${audioUploadError.message}`);
+        throw new AppError({ stage: "storage", provider: "supabase", code: "upload_failed", attempt: 1, generationId, retriable: true }, `Failed to upload final audio: ${audioUploadError.message}`);
       }
 
       // Cleanup tmp and tts-chunks
@@ -290,7 +325,7 @@ export const generateAudiobook = task({
       return { audioPath, durationSeconds };
 
     } catch (err: unknown) {
-      const errorInfo = err instanceof BartlettError ? err.info : {
+      const errorInfo = err instanceof AppError ? err.info : {
         stage: "outline" as const,
         provider: "internal" as const,
         code: "unknown",
@@ -305,7 +340,7 @@ export const generateAudiobook = task({
         stage: errorInfo.stage,
         provider: errorInfo.provider,
         kind: "error",
-        error: err instanceof BartlettError ? err.toJSON() : truncateForStorage(String(err)),
+        error: err instanceof AppError ? err.toJSON() : truncateForStorage(String(err)),
       });
 
       throw err;

@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import type { GenerationStatus, StageProgress, BartlettErrorInfo } from "../types";
+import type { GenerationStatus, StageProgress, AppErrorInfo } from "../types";
 
 function serviceClient() {
   return createClient(
@@ -11,7 +11,7 @@ function serviceClient() {
 export async function setGenerationStatus(
   generationId: string,
   status: GenerationStatus,
-  extra?: Partial<{ completedAt: string; error: BartlettErrorInfo }>,
+  extra?: Partial<{ completedAt: string; error: AppErrorInfo }>,
 ) {
   const supabase = serviceClient();
   const update: Record<string, unknown> = { status };
@@ -57,7 +57,7 @@ export async function setChapterStatus(
   generationId: string,
   idx: number,
   status: string,
-  extra?: Partial<{ research: unknown; draft: string; error: BartlettErrorInfo }>,
+  extra?: Partial<{ research: unknown; draft: string; error: AppErrorInfo }>,
 ) {
   const supabase = serviceClient();
   const update: Record<string, unknown> = { status, updated_at: new Date().toISOString() };

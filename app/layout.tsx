@@ -16,7 +16,7 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Bartlett — On-Demand Audio Briefings",
+  title: "Ask Anything — On-Demand Audio Briefings",
   description: "Generate polished, narrated audio briefings on any topic.",
 };
 
