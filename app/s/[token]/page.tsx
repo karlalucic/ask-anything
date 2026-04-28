@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { AudioPlayer } from "@/components/audio-player";
+import { DownloadButton } from "@/components/download-button";
 import { FeedbackButtons } from "@/components/feedback-buttons";
 import { SiteNav } from "@/components/site-nav";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
@@ -47,7 +48,10 @@ export default async function SharedListenPage({ params }: { params: Promise<{ t
           <AudioPlayer src={audioUrl} durationSeconds={generation.audioDurationSeconds} />
         </div>
 
-        <FeedbackButtons generationId={generation.id} shareToken={token} />
+        <div className="mb-10 flex items-center justify-between gap-3">
+          <FeedbackButtons generationId={generation.id} shareToken={token} />
+          <DownloadButton audioUrl={audioUrl} title={generation.title ?? generation.topic} />
+        </div>
 
         {generation.chapters && generation.chapters.length > 0 && (
           <div className="border-t border-white/10 pt-8 mt-8">

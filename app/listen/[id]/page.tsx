@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { GenerationProgress } from "@/components/generation-progress";
 import { AudioPlayer } from "@/components/audio-player";
 import { ShareButton } from "@/components/share-button";
+import { DownloadButton } from "@/components/download-button";
 import { SiteNav } from "@/components/site-nav";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
 
@@ -35,6 +36,9 @@ export default async function ListenPage({ params }: { params: Promise<{ id: str
     <main className="min-h-screen bg-black text-white">
       <SiteNav>
         <Link href="/library" className="text-sm text-white/70 transition-colors duration-150 hover:text-white">Library</Link>
+        {generation.status === "complete" && audioUrl && (
+          <DownloadButton audioUrl={audioUrl} title={generation.title ?? generation.topic} />
+        )}
         {generation.status === "complete" && <ShareButton generationId={id} />}
       </SiteNav>
 
