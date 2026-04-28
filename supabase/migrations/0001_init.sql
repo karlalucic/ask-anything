@@ -279,8 +279,8 @@ create index if not exists user_documents_user_idx on user_documents(user_id, cr
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values
-  ('audio', 'audio', true, 104857600, array['audio/mpeg']),
-  ('tts-chunks', 'tts-chunks', false, 104857600, array['audio/mpeg']),
+  ('audio', 'audio', true, 524288000, array['audio/mpeg']),
+  ('tts-chunks', 'tts-chunks', false, 524288000, array['audio/mpeg']),
   ('user-docs', 'user-docs', false, 10485760, array['application/pdf'])
 on conflict (id) do update
 set

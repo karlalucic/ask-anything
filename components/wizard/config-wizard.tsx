@@ -192,16 +192,16 @@ export function ConfigWizard() {
             <Slider
               className="mt-4"
               min={5}
-              max={90}
+              max={45}
               step={5}
               value={[form.duration]}
               onValueChange={(val) => update("duration", Array.isArray(val) ? (val as number[])[0] : (val as number))}
             />
             <div className="mt-2 flex justify-between text-[11px] text-white/30">
               <span>5 min</span>
+              <span>15 min</span>
               <span>30 min</span>
-              <span>60 min</span>
-              <span>90 min</span>
+              <span>45 min</span>
             </div>
           </div>
 
