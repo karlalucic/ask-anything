@@ -47,7 +47,7 @@ function isChapterPlanArray(value: unknown): value is ChapterPlan[] {
 
 export const generateAudiobook = task({
   id: "generate-audiobook",
-  maxDuration: 3600,
+  maxDuration: 10800,
   run: async (payload: GeneratePayload) => {
     const { generationId, userId, topic, duration, familiarity, intent, voice, styleCard } = payload;
 
@@ -62,7 +62,7 @@ export const generateAudiobook = task({
       // ── Stage 1: Outline ──────────────────────────────────────────────────
       const { data: existingGeneration } = await supabase
         .from("generations")
-        .select("outline, audio_path")
+        .select("outline, audio_path, full_script")
         .eq("id", generationId)
         .single();
 
@@ -86,11 +86,11 @@ export const generateAudiobook = task({
 
         let outlineResponse: Anthropic.Message;
         try {
-          outlineResponse = await anthropic.messages.create({
+          outlineResponse = await anthropic.messages.stream({
             model: "claude-sonnet-4-6",
             max_tokens: 16000,
             messages: [{ role: "user", content: outlinePrompt }],
-          });
+          }).finalMessage();
         } catch (err: unknown) {
           const e = err as { status?: number; message?: string };
           throw new AppError({ stage: "outline", provider: "anthropic", code: "api_error", upstreamStatus: e.status, attempt: 1, generationId, retriable: true }, `Outline failed: ${e.message}`, err as Error);
@@ -187,48 +187,55 @@ export const generateAudiobook = task({
 
       // ── Stage 4: Aggregation ──────────────────────────────────────────────
       await setGenerationStatus(generationId, "aggregating");
-      logger.info("Stage 4: Aggregating script", { generationId });
 
-      const aggregatePrompt = buildAggregatePrompt({
-        chapters: chapters.map((c, i) => ({ title: c.title, draft: drafts[i] })),
-        styleCard,
-        targetTotalWords: getDurationWords(duration),
-      });
+      let fullScript: string;
+      if (existingGeneration?.full_script) {
+        fullScript = existingGeneration.full_script;
+        logger.info("Stage 4: Reusing cached full_script", { generationId, wordCount: fullScript.split(/\s+/).length });
+        await logRunEvent({ generationId, stage: "aggregate", provider: "internal", kind: "info", response: { reused: true } });
+      } else {
+        logger.info("Stage 4: Aggregating script", { generationId });
 
-      const aggStart = Date.now();
-      await logRunEvent({ generationId, stage: "aggregate", provider: "anthropic", kind: "call", attempt: 1 });
-
-      let aggResponse: Anthropic.Message;
-      try {
-        aggResponse = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
-          max_tokens: 16000,
-          messages: [{ role: "user", content: aggregatePrompt }],
+        const aggregatePrompt = buildAggregatePrompt({
+          chapters: chapters.map((c, i) => ({ title: c.title, draft: drafts[i] })),
+          styleCard,
+          targetTotalWords: getDurationWords(duration),
         });
-      } catch (err: unknown) {
-        const e = err as { status?: number; message?: string };
-        throw new AppError({ stage: "aggregate", provider: "anthropic", code: "api_error", upstreamStatus: e.status, attempt: 1, generationId, retriable: true }, `Aggregation failed: ${e.message}`, err as Error);
+
+        const aggStart = Date.now();
+        await logRunEvent({ generationId, stage: "aggregate", provider: "anthropic", kind: "call", attempt: 1 });
+
+        let aggResponse: Anthropic.Message;
+        try {
+          aggResponse = await anthropic.messages.stream({
+            model: "claude-sonnet-4-6",
+            max_tokens: 16000,
+            messages: [{ role: "user", content: aggregatePrompt }],
+          }).finalMessage();
+        } catch (err: unknown) {
+          const e = err as { status?: number; message?: string };
+          throw new AppError({ stage: "aggregate", provider: "anthropic", code: "api_error", upstreamStatus: e.status, attempt: 1, generationId, retriable: true }, `Aggregation failed: ${e.message}`, err as Error);
+        }
+
+        await recordProviderUsage({
+          generationId,
+          userId,
+          stage: "aggregate",
+          provider: "anthropic",
+          model: "claude-sonnet-4-6",
+          inputTokens: aggResponse.usage.input_tokens,
+          outputTokens: aggResponse.usage.output_tokens,
+          cachedInputTokens: aggResponse.usage.cache_read_input_tokens ?? 0,
+          cacheCreationInputTokens: aggResponse.usage.cache_creation_input_tokens ?? 0,
+          webSearchRequests: aggResponse.usage.server_tool_use?.web_search_requests ?? 0,
+          durationMs: Date.now() - aggStart,
+        });
+
+        fullScript = aggResponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+
+        await logRunEvent({ generationId, stage: "aggregate", provider: "anthropic", kind: "call", attempt: 1, durationMs: Date.now() - aggStart, response: { wordCount: fullScript.split(/\s+/).length } });
+        await supabase.from("generations").update({ full_script: fullScript }).eq("id", generationId);
       }
-
-      // Record usage IMMEDIATELY (before extract/upload).
-      await recordProviderUsage({
-        generationId,
-        userId,
-        stage: "aggregate",
-        provider: "anthropic",
-        model: "claude-sonnet-4-6",
-        inputTokens: aggResponse.usage.input_tokens,
-        outputTokens: aggResponse.usage.output_tokens,
-        cachedInputTokens: aggResponse.usage.cache_read_input_tokens ?? 0,
-        cacheCreationInputTokens: aggResponse.usage.cache_creation_input_tokens ?? 0,
-        webSearchRequests: aggResponse.usage.server_tool_use?.web_search_requests ?? 0,
-        durationMs: Date.now() - aggStart,
-      });
-
-      const fullScript = aggResponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
-
-      await logRunEvent({ generationId, stage: "aggregate", provider: "anthropic", kind: "call", attempt: 1, durationMs: Date.now() - aggStart, response: { wordCount: fullScript.split(/\s+/).length } });
-      await supabase.from("generations").update({ full_script: fullScript }).eq("id", generationId);
 
       // ── Stage 5: TTS ──────────────────────────────────────────────────────
       await setGenerationStatus(generationId, "synthesizing");
