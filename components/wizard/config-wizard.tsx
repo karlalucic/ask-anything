@@ -69,6 +69,10 @@ export function ConfigWizard() {
 
   async function fetchStyleCard() {
     if (!form.styleInput.trim()) return;
+    if (!form.topic.trim()) {
+      setStyleError("Add a topic first.");
+      return;
+    }
     setStyleLoading(true);
     setStyleError("");
     try {
@@ -159,17 +163,22 @@ export function ConfigWizard() {
     <div>
       {/* Step indicator */}
       <div className="mb-10 flex flex-wrap items-center gap-2 text-xs">
-        {STEPS.map((s, i) => (
-          <div key={s} className="flex items-center gap-2">
-            <button
-              onClick={() => setStep(s)}
-              className={`transition-colors duration-150 ${step === s ? "font-medium text-white" : "text-white/30 hover:text-white/60"}`}
-            >
-              {STEP_LABELS[s]}
-            </button>
-            {i < STEPS.length - 1 && <span className="text-white/10 text-xs">›</span>}
-          </div>
-        ))}
+        {STEPS.map((s, i) => {
+          const currentIdx = STEPS.indexOf(step);
+          const reachable = i <= currentIdx;
+          return (
+            <div key={s} className="flex items-center gap-2">
+              <button
+                onClick={() => reachable && setStep(s)}
+                disabled={!reachable}
+                className={`transition-colors duration-150 ${step === s ? "font-medium text-white" : reachable ? "text-white/30 hover:text-white/60" : "text-white/15 cursor-not-allowed"}`}
+              >
+                {STEP_LABELS[s]}
+              </button>
+              {i < STEPS.length - 1 && <span className="text-white/10 text-xs">›</span>}
+            </div>
+          );
+        })}
       </div>
 
       {/* Step: Meta */}
