@@ -29,11 +29,20 @@ export async function POST(req: NextRequest) {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const startedAt = Date.now();
-  const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 1024,
-    messages: [{ role: "user", content: buildStyleRefinePrompt(parsed.data) }],
-  });
+  let response;
+  try {
+    response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
+      messages: [{ role: "user", content: buildStyleRefinePrompt(parsed.data) }],
+    });
+  } catch (err: unknown) {
+    const e = err as { status?: number; message?: string };
+    return NextResponse.json(
+      { error: `Anthropic API error: ${e.message ?? "unknown"}` },
+      { status: e.status ?? 500 },
+    );
+  }
   await recordProviderUsage({
     userId: user.id,
     stage: "style_refine",

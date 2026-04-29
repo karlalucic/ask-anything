@@ -77,8 +77,11 @@ export function ConfigWizard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ styleInput: form.styleInput, topic: form.topic, familiarity: form.familiarity, intent: form.intent }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Failed");
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = typeof json.error === "string" ? json.error : json.error ? JSON.stringify(json.error) : `Request failed (${res.status})`;
+        throw new Error(msg);
+      }
       update("styleCard", json.styleCard);
       update("styleFollowups", json.followups?.map((f: { q: string; options?: string[] } | string) =>
         typeof f === "string" ? { q: f, a: "", options: [] } : { q: f.q, a: "", options: f.options ?? [] }
