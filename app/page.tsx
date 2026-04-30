@@ -26,7 +26,7 @@ const HOW_IT_WORKS = [
   },
   {
     title: "Listen.",
-    body: "We turn it into a personal podcast — written, narrated, ready to play. Five to ninety minutes, your call.",
+    body: "We turn it into a personal podcast — written, narrated, ready to play. Five to sixty minutes, your call.",
   },
 ];
 

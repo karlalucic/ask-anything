@@ -20,7 +20,7 @@ const SLIDES = [
   },
   {
     title: "Listen.",
-    body: "We turn it into a personal podcast — around 5 to 90 minutes — that you can listen to or download.",
+    body: "We turn it into a personal podcast — around 5 to 60 minutes — that you can listen to or download.",
   },
 ];
 

@@ -9,7 +9,7 @@ export type GenerationStatus =
   | "failed"
   | "canceled";
 
-export type DurationPreset = number; // minutes (5–90)
+export type DurationPreset = number; // minutes (5–60)
 export type FamiliarityLevel = "beginner" | "intermediate" | "advanced";
 export type IntentType = "curious" | "work" | "comparing" | "deep_dive";
 export type VoiceId = "eve" | "ara" | "rex" | "sal" | "leo";
