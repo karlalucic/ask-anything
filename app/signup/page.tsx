@@ -1,15 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import posthog from "posthog-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getSafeRedirectPath } from "@/lib/auth/redirect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SiteNav } from "@/components/site-nav";
 
-export default function SignupPage() {
+function SignupInner() {
+  const searchParams = useSearchParams();
+  const next = getSafeRedirectPath(searchParams.get("next"));
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [done, setDone] = useState(false);
@@ -21,7 +26,8 @@ export default function SignupPage() {
     setError("");
     setLoading(true);
     const supabase = getSupabaseBrowserClient();
-    const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/api/auth/callback` } });
+    const emailRedirectTo = `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(next)}`;
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo } });
     if (error) { setError(error.message); setLoading(false); return; }
     if (data.user) {
       posthog.identify(data.user.id, { email: data.user.email });
@@ -32,9 +38,10 @@ export default function SignupPage() {
 
   async function handleGoogle() {
     const supabase = getSupabaseBrowserClient();
+    const redirectTo = `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(next)}`;
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/api/auth/callback` },
+      options: { redirectTo },
     });
   }
 
@@ -45,6 +52,7 @@ export default function SignupPage() {
         <main className="mx-auto max-w-sm px-6 py-24 text-center">
           <h2 className="mb-3 text-2xl font-normal leading-snug text-white">Check your email</h2>
           <p className="text-sm leading-relaxed text-white/50">We sent a confirmation link to <strong className="font-medium text-white/70">{email}</strong>. Click it to activate your account.</p>
+          <p className="mt-4 text-xs leading-relaxed text-white/40">Open the link in this browser to keep your draft.</p>
         </main>
       </div>
     );
@@ -84,10 +92,18 @@ export default function SignupPage() {
           </form>
 
           <p className="mt-6 text-center text-sm text-white/30">
-            Already have an account? <Link href="/login" className="text-white/60 underline underline-offset-4">Sign in</Link>
+            Already have an account? <Link href={`/login${next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}`} className="text-white/60 underline underline-offset-4">Sign in</Link>
           </p>
         </div>
       </main>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupInner />
+    </Suspense>
   );
 }

@@ -7,7 +7,7 @@ function sanitizeFilename(name: string): string {
     .trim()
     .replace(/\s+/g, "-")
     .toLowerCase()
-    .slice(0, 80) || "briefing";
+    .slice(0, 80) || "podcast";
 }
 
 export function DownloadButton({ audioUrl, title }: { audioUrl: string; title: string }) {

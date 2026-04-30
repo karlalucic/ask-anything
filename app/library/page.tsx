@@ -23,7 +23,7 @@ export default async function LibraryPage() {
   return (
     <main className="min-h-screen bg-black text-white">
       <SiteNav>
-        <Link href="/new" className={cn(buttonVariants({ size: "sm" }))}>New briefing</Link>
+        <Link href="/new" className={cn(buttonVariants({ size: "sm" }))}>New podcast</Link>
       </SiteNav>
 
       <div className="mx-auto max-w-3xl px-6 py-12">
@@ -31,7 +31,7 @@ export default async function LibraryPage() {
 
         {generations.length === 0 ? (
           <div className="liquid-glass rounded-xl py-20 text-center">
-            <p className="mb-5 text-sm text-white/30">You haven&apos;t generated any briefings yet.</p>
+            <p className="mb-5 text-sm text-white/30">You haven&apos;t generated any podcasts yet.</p>
             <Link href="/new" className={cn(buttonVariants())}>Start your first</Link>
           </div>
         ) : (

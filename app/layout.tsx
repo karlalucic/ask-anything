@@ -17,8 +17,8 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Ask Anything — On-Demand Audio Briefings",
-  description: "Generate polished, narrated audio briefings on any topic.",
+  title: "Ask Anything — Personal Podcasts on Any Topic",
+  description: "Tell us what you'd like to understand. We'll teach you — with a personal podcast in the style and voice you pick.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

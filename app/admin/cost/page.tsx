@@ -218,7 +218,7 @@ export default async function AdminCostPage() {
               </div>
             ))}
             {usage.length === 0 && (
-              <div className="px-4 py-3 text-xs text-white/40">No usage events yet — generate a briefing to start populating this view.</div>
+              <div className="px-4 py-3 text-xs text-white/40">No usage events yet — generate a podcast to start populating this view.</div>
             )}
           </div>
         </section>

@@ -1,6 +1,6 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
 
+import { IntroModal } from "@/components/intro-modal";
 import { SiteNav } from "@/components/site-nav";
 import { buttonVariants } from "@/components/ui/button";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -8,12 +8,27 @@ import { cn } from "@/lib/utils";
 
 const HERO_VIDEO = "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260314_131748_f2ca2a28-fed7-44c8-b9a9-bd9acdd5ec31.mp4";
 
-const SAMPLE_BRIEFINGS = [
-  { title: "The physics of fermentation", date: "Apr 12", duration: "18 min", status: "complete" },
-  { title: "How central banks actually set interest rates", date: "Apr 11", duration: null, status: "drafting" },
-  { title: "Who actually built the English common law", date: "Apr 9", duration: "42 min", status: "complete" },
+const SAMPLE_PODCASTS = [
+  { title: "How my mortgage actually works", date: "Apr 12", duration: "22 min", status: "complete" },
+  { title: "What tariffs really do to prices", date: "Apr 11", duration: null, status: "drafting" },
+  { title: "How careers will change in the age of AI", date: "Apr 9", duration: "31 min", status: "complete" },
+  { title: "The science of getting better sleep", date: "Apr 7", duration: "18 min", status: "complete" },
 ];
 
+const HOW_IT_WORKS = [
+  {
+    title: "Tell us what you want to understand.",
+    body: "Type any subject. Pick how long, and how much you already know.",
+  },
+  {
+    title: "Pick how it should sound.",
+    body: "Choose a voice. Choose a writing style — like The New Yorker or a friend explaining over coffee.",
+  },
+  {
+    title: "Listen.",
+    body: "We turn it into a personal podcast — written, narrated, ready to play. Five to forty-five minutes, your call.",
+  },
+];
 
 export default async function HomePage() {
   const supabase = await createSupabaseServerClient();
@@ -21,9 +36,24 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (!user) {
+    return (
+      <main className="min-h-screen bg-black text-white">
+        <LoggedOutLanding />
+      </main>
+    );
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("has_seen_intro")
+    .eq("id", user.id)
+    .single();
+
   return (
     <main className="min-h-screen bg-black text-white">
-      {user ? <LoggedInHome /> : <LoggedOutLanding />}
+      <LoggedInHome />
+      <IntroModal initiallyOpen={!profile?.has_seen_intro} />
     </main>
   );
 }
@@ -48,7 +78,7 @@ function LoggedInHome() {
               Library
             </Link>
             <Link href="/new" className={cn(buttonVariants({ size: "sm" }))}>
-              New briefing
+              New podcast
             </Link>
           </>
         </SiteNav>
@@ -59,9 +89,12 @@ function LoggedInHome() {
             <span className="block">Ask anything.</span>
             <em className="mt-2 block not-italic text-white/50">Know everything.</em>
           </h1>
+          <p className="mt-6 max-w-lg text-lg leading-relaxed text-white/50">
+            What do you want to understand today?
+          </p>
           <div className="mt-12 flex flex-col gap-3 sm:flex-row">
             <Link href="/new" className={cn(buttonVariants({ size: "lg" }))}>
-              New briefing
+              New podcast
             </Link>
             <Link href="/library" className={cn(buttonVariants({ variant: "outline", size: "lg" }))}>
               Open library
@@ -98,11 +131,11 @@ function HeroSection() {
             <em className="mt-2 block not-italic text-white/50">Know everything.</em>
           </h1>
           <p className="mt-8 max-w-lg text-lg leading-relaxed text-white/50">
-            Type a subject, choose how deep to go, and receive a polished audio briefing shaped like a real editorial podcast.
+            Tell us what you&rsquo;d like to understand. We&rsquo;ll teach you &mdash; with a personal podcast in the style and voice you pick.
           </p>
           <div className="mt-12 flex flex-wrap items-center gap-3">
-            <Link href="/signup" className={cn(buttonVariants({ size: "lg" }))}>
-              Get started free
+            <Link href="/new" className={cn(buttonVariants({ size: "lg" }))}>
+              Get started
             </Link>
             <Link href="/login" className={cn(buttonVariants({ variant: "outline", size: "lg" }))}>
               Sign in
@@ -141,43 +174,47 @@ function PromptGlassPanel() {
   return (
     <aside className="liquid-glass rounded-2xl p-5">
       <div className="border-b border-white/10 pb-5">
-        <p className="text-xs font-medium uppercase tracking-[0.24em] text-white/40">Briefing draft</p>
+        <p className="text-xs font-medium uppercase tracking-[0.24em] text-white/40">Podcast draft</p>
         <p className="mt-4 font-display text-3xl leading-tight text-white">
-          Why the Dutch Republic became a financial superpower
+          How Steve Jobs built his empire
         </p>
         <p className="mt-4 text-sm leading-6 text-white/50">
-          A narrative briefing with scene-setting, clear context, and a dry aside where it earns one.
+          Twenty-five minutes on how vision, timing, and stubbornness compound &mdash; narrated in the voice of your choice.
         </p>
       </div>
       <div className="space-y-3 pt-5">
-        {SAMPLE_BRIEFINGS.map((briefing) => (
-          <SampleBriefingRow key={briefing.title} briefing={briefing} href="/signup" />
+        {SAMPLE_PODCASTS.slice(0, 3).map((podcast) => (
+          <SamplePodcastRow key={podcast.title} podcast={podcast} href="/new" />
         ))}
       </div>
-      <Link href="/signup" className={cn(buttonVariants({ className: "mt-5 w-full" }))}>
-        Create this briefing
+      <Link href="/new" className={cn(buttonVariants({ className: "mt-5 w-full" }))}>
+        Create this podcast
       </Link>
     </aside>
   );
 }
-
 
 function EditorialSection() {
   return (
     <section className="relative bg-black px-6 pb-28 pt-16">
       <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
         <div className="lg:pt-7">
-          <p className="mb-5 text-xs font-medium uppercase tracking-[0.28em] text-white/40">Editorial by design</p>
-          <h2 className="max-w-xl font-display text-5xl leading-tight text-white md:text-6xl">
-            A briefing should sound finished before it reaches your ears.
-          </h2>
-          <p className="mt-6 max-w-xl text-lg leading-relaxed text-white/50">
-            Choose a voice, a length, and a house style. We turn your question into chapters, narration, and a listenable arc.
-          </p>
+          <p className="mb-5 text-xs font-medium uppercase tracking-[0.28em] text-white/40">How it works</p>
+          <ol className="space-y-7">
+            {HOW_IT_WORKS.map((step, i) => (
+              <li key={step.title} className="flex gap-5">
+                <span className="font-display text-3xl leading-none text-white/30">{i + 1}</span>
+                <div>
+                  <p className="font-display text-2xl leading-tight text-white md:text-3xl">{step.title}</p>
+                  <p className="mt-2 max-w-md text-base leading-relaxed text-white/50">{step.body}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
         </div>
         <div className="liquid-glass rounded-2xl p-3">
-          {SAMPLE_BRIEFINGS.map((briefing) => (
-            <SampleBriefingRow key={briefing.title} briefing={briefing} href="/signup" spacious />
+          {SAMPLE_PODCASTS.map((podcast) => (
+            <SamplePodcastRow key={podcast.title} podcast={podcast} href="/new" spacious />
           ))}
         </div>
       </div>
@@ -185,12 +222,12 @@ function EditorialSection() {
   );
 }
 
-function SampleBriefingRow({
-  briefing,
+function SamplePodcastRow({
+  podcast,
   href,
   spacious = false,
 }: {
-  briefing: (typeof SAMPLE_BRIEFINGS)[number];
+  podcast: (typeof SAMPLE_PODCASTS)[number];
   href: string;
   spacious?: boolean;
 }) {
@@ -203,12 +240,12 @@ function SampleBriefingRow({
       )}
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-white/80">{briefing.title}</p>
+        <p className="truncate text-sm font-medium text-white/80">{podcast.title}</p>
         <div className="mt-1 flex items-center gap-2 text-xs text-white/40">
-          <span>{briefing.date}</span>
+          <span>{podcast.date}</span>
           <span>·</span>
-          {briefing.duration ? (
-            <span>{briefing.duration}</span>
+          {podcast.duration ? (
+            <span>{podcast.duration}</span>
           ) : (
             <span className="inline-flex items-center gap-1.5">
               <span className="size-1 rounded-full bg-white animate-pulse" />
@@ -220,10 +257,10 @@ function SampleBriefingRow({
       <span
         className={cn(
           "inline-flex h-[22px] shrink-0 items-center rounded-full px-2.5 text-[11px] font-medium",
-          briefing.status === "complete" ? "bg-white text-black" : "border border-white/20 text-white/50",
+          podcast.status === "complete" ? "bg-white text-black" : "border border-white/20 text-white/50",
         )}
       >
-        {briefing.status}
+        {podcast.status}
       </span>
     </Link>
   );

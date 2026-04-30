@@ -40,7 +40,7 @@ export function FeedbackButtons({ generationId, shareToken }: Props) {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-white/40">Was this briefing helpful?</p>
+      <p className="text-sm text-white/40">Was this podcast helpful?</p>
       <div className="flex items-center gap-3">
         <Button
           variant={voted === 1 ? "default" : "outline"}

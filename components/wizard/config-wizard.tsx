@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
+import { AuthGateModal } from "@/components/auth-gate-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { clearDraft, loadDraft, saveDraft } from "@/lib/draft-storage";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { FamiliarityLevel, IntentType, VoiceId, StyleCard, StyleFollowup, SourcesConfig } from "@/lib/types";
 import { VOICE_LABELS } from "@/lib/types";
 import { Slider } from "@/components/ui/slider";
@@ -65,7 +68,11 @@ function pillClass(selected: boolean, className?: string) {
   );
 }
 
-export function ConfigWizard() {
+interface ConfigWizardProps {
+  initialAuthed: boolean;
+}
+
+export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("meta");
   const [form, setForm] = useState<FormState>({
@@ -77,6 +84,53 @@ export function ConfigWizard() {
   const [styleError, setStyleError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
+  const [authed, setAuthed] = useState(initialAuthed);
+  const [showAuthGate, setShowAuthGate] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Hydrate from localStorage on mount (anonymous draft persistence).
+  // setState-in-effect is the canonical SSR-safe pattern for localStorage —
+  // it only runs once after hydration so there's no cascade.
+  useEffect(() => {
+    const draft = loadDraft();
+    if (draft) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setForm((prev) => ({
+        ...prev,
+        topic: draft.topic,
+        duration: draft.duration,
+        familiarity: draft.familiarity,
+        intent: draft.intent,
+        styleInput: draft.styleInput,
+      }));
+    }
+    setHydrated(true);
+  }, []);
+
+  // Persist draft to localStorage on change (only the meta + style input fields)
+  useEffect(() => {
+    if (!hydrated) return;
+    saveDraft({
+      topic: form.topic,
+      duration: form.duration,
+      familiarity: form.familiarity,
+      intent: form.intent,
+      styleInput: form.styleInput,
+    });
+  }, [hydrated, form.topic, form.duration, form.familiarity, form.intent, form.styleInput]);
+
+  // Live auth state — sign-in in another tab dissolves the gate
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event: string, session: { user?: unknown } | null) => {
+        const nextAuthed = !!session?.user;
+        setAuthed(nextAuthed);
+        if (nextAuthed) setShowAuthGate(false);
+      },
+    );
+    return () => subscription.unsubscribe();
+  }, []);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -86,6 +140,10 @@ export function ConfigWizard() {
     if (!form.styleInput.trim()) return;
     if (!form.topic.trim()) {
       setStyleError("Add a topic first.");
+      return;
+    }
+    if (!authed) {
+      setShowAuthGate(true);
       return;
     }
     setStyleLoading(true);
@@ -161,6 +219,7 @@ export function ConfigWizard() {
         sources_web: form.sourcesConfig.web,
         sources_academic: form.sourcesConfig.academic,
       });
+      clearDraft();
       router.push(`/listen/${json.id}`);
     } catch (e: unknown) {
       setGenError((e as Error).message);
@@ -169,6 +228,10 @@ export function ConfigWizard() {
   }
 
   function next() {
+    if (step === "meta" && !authed) {
+      setShowAuthGate(true);
+      return;
+    }
     const idx = STEPS.indexOf(step);
     if (idx < STEPS.length - 1) setStep(STEPS[idx + 1]);
   }
@@ -207,7 +270,7 @@ export function ConfigWizard() {
             <Label htmlFor="topic" className="text-base font-medium text-white">What do you want to learn about?</Label>
             <Textarea
               id="topic"
-              placeholder="e.g. why the Dutch Republic became a financial superpower"
+              placeholder="e.g. how Steve Jobs built his empire"
               value={form.topic}
               onChange={(e) => update("topic", e.target.value)}
               className="mt-2 resize-none text-base"
@@ -446,11 +509,13 @@ export function ConfigWizard() {
           <div className="flex gap-3">
             <Button variant="ghost" onClick={prev}>Back</Button>
             <Button className="flex-1" onClick={handleGenerate} disabled={generating}>
-              {generating ? "Starting" : "Generate briefing"}
+              {generating ? "Starting" : "Generate podcast"}
             </Button>
           </div>
         </div>
       )}
+
+      <AuthGateModal open={showAuthGate} onClose={() => setShowAuthGate(false)} />
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PROTECTED_PATHS = ["/new", "/library", "/listen", "/admin"];
+const PROTECTED_PATHS = ["/library", "/listen", "/admin"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

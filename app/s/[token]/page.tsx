@@ -51,7 +51,7 @@ export default async function SharedListenPage({ params }: { params: Promise<{ t
         <div className="mb-10">
           <h1 className="text-2xl font-normal leading-snug text-white">{generation.title ?? generation.topic}</h1>
           <p className="text-sm text-white/40 mt-1">
-            {generation.duration} min briefing
+            {generation.duration} min podcast
           </p>
         </div>
 
