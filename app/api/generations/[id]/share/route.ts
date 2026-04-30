@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { randomBytes } from "crypto";
+import { captureServerEvent } from "@/lib/posthog-server";
 
 function generateToken(): string {
   return randomBytes(16).toString("base64url");
@@ -38,6 +39,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     token,
     generation_id: id,
     created_by: user.id,
+  });
+
+  captureServerEvent({
+    distinctId: user.id,
+    event: "share_link_created",
+    properties: { generation_id: id },
   });
 
   return NextResponse.json({ token });

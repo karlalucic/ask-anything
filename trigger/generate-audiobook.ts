@@ -5,6 +5,7 @@ import { execa } from "execa";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { PostHog } from "posthog-node";
 import { buildOutlinePrompt, parseOutlineResponse } from "../lib/prompts/outline";
 import { buildAggregatePrompt } from "../lib/prompts/aggregate";
 import { setGenerationStatus, bumpProgress, logRunEvent } from "../lib/supabase/progress";
@@ -57,6 +58,16 @@ export const generateAudiobook = task({
     );
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const posthog = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN
+      ? new PostHog(process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN, {
+          host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
+          flushAt: 1,
+          flushInterval: 0,
+        })
+      : null;
+
+    const startedAt = Date.now();
 
     try {
       // ── Stage 1: Outline ──────────────────────────────────────────────────
@@ -329,6 +340,22 @@ export const generateAudiobook = task({
       }).eq("id", generationId);
 
       logger.info("Generation complete", { generationId, durationSeconds });
+
+      posthog?.capture({
+        distinctId: userId,
+        event: "generation_completed",
+        properties: {
+          generation_id: generationId,
+          duration_seconds: durationSeconds,
+          chapter_count: chapters.length,
+          elapsed_ms: Date.now() - startedAt,
+          duration,
+          familiarity,
+          intent,
+          voice,
+        },
+      });
+
       return { audioPath, durationSeconds };
 
     } catch (err: unknown) {
@@ -350,7 +377,22 @@ export const generateAudiobook = task({
         error: err instanceof AppError ? err.toJSON() : truncateForStorage(String(err)),
       });
 
+      posthog?.capture({
+        distinctId: userId,
+        event: "generation_failed",
+        properties: {
+          generation_id: generationId,
+          stage: errorInfo.stage,
+          provider: errorInfo.provider,
+          code: errorInfo.code,
+          retriable: errorInfo.retriable,
+          elapsed_ms: Date.now() - startedAt,
+        },
+      });
+
       throw err;
+    } finally {
+      if (posthog) await posthog.shutdown();
     }
   },
 });

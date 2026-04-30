@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import posthog from "posthog-js";
 import { Button } from "@/components/ui/button";
 
 export function ShareButton({ generationId }: { generationId: string }) {
@@ -14,6 +15,7 @@ export function ShareButton({ generationId }: { generationId: string }) {
       const { token } = await res.json();
       const url = `${window.location.origin}/s/${token}`;
       await navigator.clipboard.writeText(url);
+      posthog.capture("briefing_shared", { generation_id: generationId });
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { captureServerEvent } from "@/lib/posthog-server";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -35,6 +36,11 @@ export async function POST(req: NextRequest) {
     }).select("id, title, kind, bytes, created_at").single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    captureServerEvent({
+      distinctId: user.id,
+      event: "document_uploaded",
+      properties: { kind: "pdf", bytes: file.size, document_id: data.id },
+    });
     return NextResponse.json({ document: data });
   }
 
@@ -50,6 +56,11 @@ export async function POST(req: NextRequest) {
   }).select("id, title, kind, source_url, created_at").single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  captureServerEvent({
+    distinctId: user.id,
+    event: "document_uploaded",
+    properties: { kind: "url", document_id: data.id },
+  });
   return NextResponse.json({ document: data });
 }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
+import { captureServerEvent } from "@/lib/posthog-server";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -60,5 +61,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   const { error } = await supabase.from("generations").delete().eq("id", id).eq("user_id", user.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  captureServerEvent({
+    distinctId: user.id,
+    event: "generation_deleted",
+    properties: { generation_id: id },
+  });
+
   return NextResponse.json({ ok: true });
 }

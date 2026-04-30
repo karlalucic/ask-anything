@@ -4,6 +4,7 @@ import { tasks } from "@trigger.dev/sdk/v3";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { toGeneration } from "@/lib/supabase/mappers";
 import type { generateAudiobook } from "@/trigger/generate-audiobook";
+import { captureServerEvent } from "@/lib/posthog-server";
 
 const bodySchema = z.object({
   topic: z.string().min(1).max(1500),
@@ -80,6 +81,21 @@ export async function POST(req: NextRequest) {
   });
 
   await supabase.from("generations").update({ trigger_run_id: handle.id }).eq("id", row.id);
+
+  captureServerEvent({
+    distinctId: user.id,
+    event: "generation_created",
+    properties: {
+      generation_id: row.id,
+      topic: parsed.data.topic,
+      duration: parsed.data.duration,
+      familiarity: parsed.data.familiarity,
+      intent: parsed.data.intent,
+      voice: parsed.data.voice,
+      sources_web: parsed.data.sourcesConfig.web,
+      sources_academic: parsed.data.sourcesConfig.academic,
+    },
+  });
 
   const response = NextResponse.json({ id: row.id });
   response.headers.set("X-Generation-Id", row.id);

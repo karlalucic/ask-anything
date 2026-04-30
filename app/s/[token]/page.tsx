@@ -5,6 +5,7 @@ import { DownloadButton } from "@/components/download-button";
 import { FeedbackButtons } from "@/components/feedback-buttons";
 import { SiteNav } from "@/components/site-nav";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
+import { captureServerEvent } from "@/lib/posthog-server";
 
 export default async function SharedListenPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -30,6 +31,16 @@ export default async function SharedListenPage({ params }: { params: Promise<{ t
   if (!data) notFound();
 
   const generation = toGenerationWithChapters(data);
+
+  captureServerEvent({
+    distinctId: `share:${token}`,
+    event: "shared_briefing_viewed",
+    properties: {
+      generation_id: generation.id,
+      share_token: token,
+      duration: generation.duration,
+    },
+  });
   const audioUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/audio/${generation.audioPath}`;
 
   return (

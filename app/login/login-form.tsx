@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import posthog from "posthog-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getSafeRedirectPath } from "@/lib/auth/redirect";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,8 @@ export default function LoginForm() {
       setLoading(false);
       return;
     }
+    posthog.identify(session.user.id, { email: session.user.email });
+    posthog.capture("user_logged_in", { method: "email" });
     router.replace(next);
     router.refresh();
   }

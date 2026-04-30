@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import posthog from "posthog-js";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -22,6 +23,12 @@ export function FeedbackButtons({ generationId, shareToken }: Props) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+    });
+    posthog.capture("feedback_submitted", {
+      generation_id: generationId,
+      rating,
+      has_note: !!note,
+      is_shared: !!shareToken,
     });
     setVoted(rating);
     setSubmitted(true);

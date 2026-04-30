@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import posthog from "posthog-js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -102,6 +103,7 @@ export function ConfigWizard() {
         typeof f === "string" ? { q: f, a: "", options: [] } : { q: f.q, a: "", options: f.options ?? [] }
       ) ?? []);
       update("followupAnswers", Array(json.followups?.length ?? 0).fill(""));
+      posthog.capture("style_card_generated", { style_input: form.styleInput });
     } catch (e: unknown) {
       setStyleError((e as Error).message);
     } finally {
@@ -150,6 +152,15 @@ export function ConfigWizard() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(formatApiError(json.error, res.status) || "Failed to start generation");
+      posthog.capture("briefing_generation_started", {
+        topic: form.topic,
+        duration: form.duration,
+        familiarity: form.familiarity,
+        intent: form.intent,
+        voice: form.voice,
+        sources_web: form.sourcesConfig.web,
+        sources_academic: form.sourcesConfig.academic,
+      });
       router.push(`/listen/${json.id}`);
     } catch (e: unknown) {
       setGenError((e as Error).message);
