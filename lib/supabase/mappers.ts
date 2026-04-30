@@ -54,6 +54,7 @@ export function toGeneration(row: unknown): Generation {
     audioPath: read(data, "audio_path", "audioPath", null),
     audioDurationSeconds: read(data, "audio_duration_seconds", "audioDurationSeconds", null),
     status: read(data, "status", "status", "queued"),
+    visibility: read(data, "visibility", "visibility", "private"),
     stageProgress: read(data, "stage_progress", "stageProgress", {}),
     error: read(data, "error", "error", null),
     triggerRunId: read(data, "trigger_run_id", "triggerRunId", null),

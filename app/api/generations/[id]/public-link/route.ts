@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { captureServerEvent } from "@/lib/posthog-server";
 import { generateShareToken } from "@/lib/sharing";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -9,16 +9,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Verify owner
-  const { data: gen } = await supabase
+  const { data: generation } = await supabase
     .from("generations")
     .select("id, status")
     .eq("id", id)
     .eq("user_id", user.id)
     .single();
 
-  if (!gen) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (gen.status !== "complete") return NextResponse.json({ error: "Generation not yet complete" }, { status: 400 });
+  if (!generation) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (generation.status !== "complete") {
+    return NextResponse.json({ error: "Generation not yet complete" }, { status: 400 });
+  }
 
   const { data: existing } = await supabase
     .from("share_links")
@@ -33,17 +34,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .update({ visibility: "public" })
       .eq("id", id)
       .eq("user_id", user.id);
+
     return NextResponse.json({ token: existing.token, visibility: "public" });
   }
 
-  const token = generateShareToken();
-  const { error: insertError } = await supabase.from("share_links").insert({
-    token,
-    generation_id: id,
-    created_by: user.id,
-  });
+  let token = generateShareToken();
+  let insertError: { message?: string; code?: string } | null = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    token = generateShareToken();
+    const { error } = await supabase.from("share_links").insert({
+      token,
+      generation_id: id,
+      created_by: user.id,
+    });
+    insertError = error;
+    if (!error) break;
+  }
 
-  if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
+  if (insertError) return NextResponse.json({ error: insertError.message ?? "Failed to create link" }, { status: 500 });
 
   const { error: visibilityError } = await supabase
     .from("generations")
@@ -68,14 +76,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: gen } = await supabase
+  const { data: generation } = await supabase
     .from("generations")
     .select("id")
     .eq("id", id)
     .eq("user_id", user.id)
     .single();
 
-  if (!gen) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!generation) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await supabase
     .from("share_links")

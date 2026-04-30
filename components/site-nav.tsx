@@ -9,7 +9,7 @@ export function SiteNav({ children, minimal = false }: { children?: ReactNode; m
           ask anything
         </Link>
         {children ? (
-          <div className="flex items-center gap-4">{children}</div>
+          <div className="flex flex-wrap items-center justify-end gap-3">{children}</div>
         ) : minimal ? (
           <span className="size-1 rounded-full bg-white/30" aria-hidden />
         ) : null}

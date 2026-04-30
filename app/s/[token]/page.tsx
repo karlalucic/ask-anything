@@ -1,14 +1,27 @@
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
+import type { Metadata } from "next";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { AudioPlayer } from "@/components/audio-player";
 import { DownloadButton } from "@/components/download-button";
 import { FeedbackButtons } from "@/components/feedback-buttons";
+import { ScriptDisplay } from "@/components/script-display";
+import { ScriptDownloadButton } from "@/components/script-download-button";
 import { SiteNav } from "@/components/site-nav";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
 import { captureServerEvent } from "@/lib/posthog-server";
 import { createAudioSignedUrl } from "@/lib/supabase/audio";
 
+export const metadata: Metadata = {
+  title: "Shared podcast",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
+
 export default async function SharedListenPage({ params }: { params: Promise<{ token: string }> }) {
+  await connection();
   const { token } = await params;
   const supabase = createSupabaseServiceClient();
 
@@ -26,6 +39,7 @@ export default async function SharedListenPage({ params }: { params: Promise<{ t
     .select("*, chapters(*)")
     .eq("id", link.generation_id)
     .eq("status", "complete")
+    .eq("visibility", "public")
     .order("idx", { referencedTable: "chapters", ascending: true })
     .single();
 
@@ -60,9 +74,14 @@ export default async function SharedListenPage({ params }: { params: Promise<{ t
           <AudioPlayer src={audioUrl} durationSeconds={generation.audioDurationSeconds} />
         </div>
 
-        <div className="mb-10 flex items-center justify-between gap-3">
+        <div className="mb-10 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <FeedbackButtons generationId={generation.id} shareToken={token} />
-          <DownloadButton audioUrl={audioUrl} title={generation.title ?? generation.topic} />
+          <div className="flex items-center gap-2">
+            <DownloadButton audioUrl={audioUrl} title={generation.title ?? generation.topic} label="MP3" />
+            {generation.fullScript && (
+              <ScriptDownloadButton script={generation.fullScript} title={generation.title ?? generation.topic} />
+            )}
+          </div>
         </div>
 
         {generation.chapters && generation.chapters.length > 0 && (
@@ -77,6 +96,10 @@ export default async function SharedListenPage({ params }: { params: Promise<{ t
               ))}
             </ol>
           </div>
+        )}
+
+        {generation.fullScript && (
+          <ScriptDisplay script={generation.fullScript} title={generation.title ?? generation.topic} />
         )}
       </div>
     </main>

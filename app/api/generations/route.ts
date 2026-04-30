@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabase
     .from("generations")
-    .select("id, title, topic, duration, status, stage_progress, audio_path, audio_duration_seconds, error, created_at, completed_at")
+    .select("id, user_id, title, topic, duration, status, visibility, stage_progress, audio_path, audio_duration_seconds, error, created_at, completed_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);

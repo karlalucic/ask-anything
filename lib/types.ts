@@ -13,6 +13,7 @@ export type DurationPreset = number; // minutes (5–90)
 export type FamiliarityLevel = "beginner" | "intermediate" | "advanced";
 export type IntentType = "curious" | "work" | "comparing" | "deep_dive";
 export type VoiceId = "eve" | "ara" | "rex" | "sal" | "leo";
+export type GenerationVisibility = "private" | "public";
 
 export interface StyleCard {
   openingPattern: string;
@@ -91,6 +92,7 @@ export interface Generation {
   audioPath: string | null;
   audioDurationSeconds: number | null;
   status: GenerationStatus;
+  visibility: GenerationVisibility;
   stageProgress: StageProgress;
   error: AppErrorInfo | null;
   triggerRunId: string | null;

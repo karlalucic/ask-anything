@@ -15,10 +15,12 @@ async function hasValidShareToken(generationId: string, token: string | undefine
   const serviceClient = createSupabaseServiceClient();
   const { data: link } = await serviceClient
     .from("share_links")
-    .select("generation_id")
+    .select("generation_id, generations!inner(status, visibility)")
     .eq("token", token)
     .eq("generation_id", generationId)
     .is("revoked_at", null)
+    .eq("generations.status", "complete")
+    .eq("generations.visibility", "public")
     .single();
 
   return Boolean(link);

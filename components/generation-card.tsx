@@ -37,7 +37,7 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-export function GenerationCard({ generation }: { generation: Generation }) {
+export function GenerationCard({ generation, sharedBy }: { generation: Generation; sharedBy?: string | null }) {
   const isTerminal = ["complete", "failed", "canceled"].includes(generation.status);
   const isActive = !isTerminal;
 
@@ -64,6 +64,12 @@ export function GenerationCard({ generation }: { generation: Generation }) {
                   <span className="size-1 rounded-full bg-white animate-pulse" />
                   in progress
                 </span>
+              </>
+            )}
+            {sharedBy && (
+              <>
+                <span className="text-xs text-white/30">·</span>
+                <span className="truncate text-xs text-white/30">Shared by {sharedBy}</span>
               </>
             )}
           </div>
