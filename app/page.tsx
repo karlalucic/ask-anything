@@ -77,6 +77,9 @@ function LoggedInHome() {
             <Link href="/library" className="text-sm text-white/70 transition-colors duration-150 hover:text-white">
               Library
             </Link>
+            <Link href="/account" className="text-sm text-white/70 transition-colors duration-150 hover:text-white">
+              Account
+            </Link>
             <Link href="/new" className={cn(buttonVariants({ size: "sm" }))}>
               New podcast
             </Link>

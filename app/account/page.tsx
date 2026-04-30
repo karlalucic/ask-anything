@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { LogOutButton } from "@/components/log-out-button";
 import { SiteNav } from "@/components/site-nav";
 import { buttonVariants } from "@/components/ui/button";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -37,10 +38,11 @@ export default async function AccountPage() {
             </div>
           </dl>
 
-          <div className="mt-8">
+          <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/library" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
               Open library
             </Link>
+            <LogOutButton />
           </div>
         </div>
       </div>
