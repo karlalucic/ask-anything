@@ -40,6 +40,20 @@ const DEFAULT_SOURCES: SourcesConfig = {
   recency: "any", domains: [], userDocIds: [],
 };
 
+function formatApiError(error: unknown, status?: number): string {
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const zodErr = error as { formErrors?: string[]; fieldErrors?: Record<string, string[]> };
+    const fieldMsg = zodErr.fieldErrors && Object.values(zodErr.fieldErrors).flat()[0];
+    if (fieldMsg) {
+      const fieldName = zodErr.fieldErrors && Object.keys(zodErr.fieldErrors)[0];
+      return fieldName ? `${fieldName}: ${fieldMsg}` : fieldMsg;
+    }
+    if (zodErr.formErrors?.[0]) return zodErr.formErrors[0];
+  }
+  return status ? `Request failed (${status})` : "Request failed";
+}
+
 function pillClass(selected: boolean, className?: string) {
   return cn(
     "rounded-lg border px-4 py-2.5 text-sm transition-all duration-150 focus-visible:ring-1 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
@@ -82,10 +96,7 @@ export function ConfigWizard() {
         body: JSON.stringify({ styleInput: form.styleInput, topic: form.topic, familiarity: form.familiarity, intent: form.intent }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg = typeof json.error === "string" ? json.error : json.error ? JSON.stringify(json.error) : `Request failed (${res.status})`;
-        throw new Error(msg);
-      }
+      if (!res.ok) throw new Error(formatApiError(json.error, res.status));
       update("styleCard", json.styleCard);
       update("styleFollowups", json.followups?.map((f: { q: string; options?: string[] } | string) =>
         typeof f === "string" ? { q: f, a: "", options: [] } : { q: f.q, a: "", options: f.options ?? [] }
@@ -137,11 +148,8 @@ export function ConfigWizard() {
           sourcesConfig: form.sourcesConfig,
         }),
       });
-      const json = await res.json();
-      if (!res.ok) {
-        const msg = typeof json.error === "string" ? json.error : JSON.stringify(json.error);
-        throw new Error(msg || "Failed to start generation");
-      }
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(formatApiError(json.error, res.status) || "Failed to start generation");
       router.push(`/listen/${json.id}`);
     } catch (e: unknown) {
       setGenError((e as Error).message);

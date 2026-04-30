@@ -6,7 +6,7 @@ import { toGeneration } from "@/lib/supabase/mappers";
 import type { generateAudiobook } from "@/trigger/generate-audiobook";
 
 const bodySchema = z.object({
-  topic: z.string().min(1).max(500),
+  topic: z.string().min(1).max(1500),
   duration: z.number().int().min(5).max(45),
   familiarity: z.enum(["beginner", "intermediate", "advanced"]),
   intent: z.enum(["curious", "work", "comparing", "deep_dive"]),

@@ -7,7 +7,7 @@ import { recordProviderUsage } from "@/lib/usage/record";
 
 const bodySchema = z.object({
   styleInput: z.string().min(1).max(200),
-  topic: z.string().min(1).max(500),
+  topic: z.string().min(1).max(1500),
   familiarity: z.enum(["beginner", "intermediate", "advanced"]),
   intent: z.enum(["curious", "work", "comparing", "deep_dive"]),
 });
