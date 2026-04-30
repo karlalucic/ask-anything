@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { Copy, LinkIcon, Lock, RefreshCw, Users, X } from "lucide-react";
 import posthog from "posthog-js";
 import { Button } from "@/components/ui/button";
@@ -158,7 +159,7 @@ export function ShareControls({
         Share
       </Button>
 
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-50 bg-black/70 px-4 py-20 backdrop-blur-sm" onClick={() => setOpen(false)}>
           <div
             className="liquid-glass ml-auto w-full max-w-md rounded-xl p-5 text-white shadow-2xl"
@@ -252,7 +253,8 @@ export function ShareControls({
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
