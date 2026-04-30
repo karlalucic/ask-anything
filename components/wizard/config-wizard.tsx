@@ -161,7 +161,7 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
         typeof f === "string" ? { q: f, a: "", options: [] } : { q: f.q, a: "", options: f.options ?? [] }
       ) ?? []);
       update("followupAnswers", Array(json.followups?.length ?? 0).fill(""));
-      posthog.capture("style_card_generated", { style_input: form.styleInput });
+      posthog.capture("style_card_generated", { style_input_length: form.styleInput.length });
     } catch (e: unknown) {
       setStyleError((e as Error).message);
     } finally {
@@ -211,7 +211,7 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(formatApiError(json.error, res.status) || "Failed to start generation");
       posthog.capture("briefing_generation_started", {
-        topic: form.topic,
+        topic_length: form.topic.length,
         duration: form.duration,
         familiarity: form.familiarity,
         intent: form.intent,
@@ -286,7 +286,7 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
             <Slider
               className="mt-4"
               min={5}
-              max={45}
+              max={90}
               step={5}
               value={[form.duration]}
               onValueChange={(val) => update("duration", Array.isArray(val) ? (val as number[])[0] : (val as number))}
@@ -295,7 +295,7 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
               <span>5 min</span>
               <span>15 min</span>
               <span>30 min</span>
-              <span>45 min</span>
+              <span>90 min</span>
             </div>
           </div>
 

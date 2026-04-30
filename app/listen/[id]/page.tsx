@@ -8,6 +8,7 @@ import { ShareButton } from "@/components/share-button";
 import { DownloadButton } from "@/components/download-button";
 import { SiteNav } from "@/components/site-nav";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
+import { createAudioSignedUrl } from "@/lib/supabase/audio";
 
 export default async function ListenPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -28,9 +29,7 @@ export default async function ListenPage({ params }: { params: Promise<{ id: str
   const generation = toGenerationWithChapters(data);
   const chapters = generation.chapters ?? [];
 
-  const audioUrl = generation.audioPath
-    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/audio/${generation.audioPath}`
-    : null;
+  const audioUrl = generation.audioPath ? await createAudioSignedUrl(generation.audioPath) : null;
 
   return (
     <main className="min-h-screen bg-black text-white">

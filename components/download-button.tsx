@@ -12,7 +12,8 @@ function sanitizeFilename(name: string): string {
 
 export function DownloadButton({ audioUrl, title }: { audioUrl: string; title: string }) {
   const filename = `${sanitizeFilename(title)}.mp3`;
-  const href = `${audioUrl}?download=${encodeURIComponent(filename)}`;
+  const separator = audioUrl.includes("?") ? "&" : "?";
+  const href = `${audioUrl}${separator}download=${encodeURIComponent(filename)}`;
 
   return (
     <a href={href} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>

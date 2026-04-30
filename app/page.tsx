@@ -26,7 +26,7 @@ const HOW_IT_WORKS = [
   },
   {
     title: "Listen.",
-    body: "We turn it into a personal podcast — written, narrated, ready to play. Five to forty-five minutes, your call.",
+    body: "We turn it into a personal podcast — written, narrated, ready to play. Five to ninety minutes, your call.",
   },
 ];
 
@@ -160,7 +160,7 @@ function HeroBackdrop() {
         loop
         muted
         playsInline
-        preload="auto"
+        preload="metadata"
         className="h-full w-full object-cover object-top opacity-99"
         src={HERO_VIDEO}
       />

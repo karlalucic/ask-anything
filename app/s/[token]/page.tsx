@@ -6,6 +6,7 @@ import { FeedbackButtons } from "@/components/feedback-buttons";
 import { SiteNav } from "@/components/site-nav";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
 import { captureServerEvent } from "@/lib/posthog-server";
+import { createAudioSignedUrl } from "@/lib/supabase/audio";
 
 export default async function SharedListenPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -33,15 +34,15 @@ export default async function SharedListenPage({ params }: { params: Promise<{ t
   const generation = toGenerationWithChapters(data);
 
   captureServerEvent({
-    distinctId: `share:${token}`,
+    distinctId: `share:${generation.id}`,
     event: "shared_briefing_viewed",
     properties: {
       generation_id: generation.id,
-      share_token: token,
       duration: generation.duration,
     },
   });
-  const audioUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/audio/${generation.audioPath}`;
+  if (!generation.audioPath) notFound();
+  const audioUrl = await createAudioSignedUrl(generation.audioPath);
 
   return (
     <main className="min-h-screen bg-black text-white">

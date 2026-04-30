@@ -7,6 +7,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export function PostHogIdentifier() {
   useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN) return;
     const supabase = getSupabaseBrowserClient();
     let active = true;
 
@@ -14,7 +15,7 @@ export function PostHogIdentifier() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!active || !session?.user) return;
       if (posthog.get_distinct_id() !== session.user.id) {
-        posthog.identify(session.user.id, { email: session.user.email });
+        posthog.identify(session.user.id);
       }
     }
 
@@ -26,7 +27,7 @@ export function PostHogIdentifier() {
         return;
       }
       if (session?.user && posthog.get_distinct_id() !== session.user.id) {
-        posthog.identify(session.user.id, { email: session.user.email });
+        posthog.identify(session.user.id);
       }
     });
 

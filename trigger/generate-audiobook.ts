@@ -14,10 +14,15 @@ import { AppError, truncateForStorage } from "../lib/errors";
 import { chapterResearch } from "./chapter-research";
 import { chapterDraft } from "./chapter-draft";
 import { ttsChunk } from "./tts-chunk";
-import type { ChapterPlan, StyleCard, FamiliarityLevel, IntentType, VoiceId, SourcesConfig, ChapterResearch } from "../lib/types";
+import type { ChapterPlan, StyleCard, FamiliarityLevel, IntentType, VoiceId, SourcesConfig } from "../lib/types";
 import { getDurationWords } from "../lib/types";
 
 const MAX_CHUNK_CHARS = 12000;
+const AGGREGATION_MAX_OUTPUT_TOKENS = 16000;
+const MODEL_AGGREGATION_WORD_LIMIT = 10000;
+const RESEARCH_CONCURRENCY = 2;
+const DRAFT_CONCURRENCY = 2;
+const TTS_CONCURRENCY = 3;
 
 interface GeneratePayload {
   generationId: string;
@@ -46,11 +51,65 @@ function isChapterPlanArray(value: unknown): value is ChapterPlan[] {
   });
 }
 
+function countWords(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function assembleScriptFromDrafts(drafts: string[]): string {
+  return drafts
+    .map((draft) => draft.trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function shouldUseModelAggregation(targetWords: number): boolean {
+  return targetWords <= MODEL_AGGREGATION_WORD_LIMIT;
+}
+
+function isScriptLongEnough(script: string, targetWords: number): boolean {
+  return countWords(script) >= Math.floor(targetWords * 0.7);
+}
+
+function isUsableAggregate(script: string, draftWords: number, targetWords: number): boolean {
+  return countWords(script) >= Math.floor(Math.min(draftWords, targetWords) * 0.75);
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  let failed = false;
+
+  async function runWorker() {
+    while (!failed) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+
+      try {
+        results[index] = await worker(items[index], index);
+      } catch (err) {
+        failed = true;
+        throw err;
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => runWorker()),
+  );
+
+  return results;
+}
+
 export const generateAudiobook = task({
   id: "generate-audiobook",
   maxDuration: 10800,
   run: async (payload: GeneratePayload) => {
-    const { generationId, userId, topic, duration, familiarity, intent, voice, styleCard } = payload;
+    const { generationId, userId, topic, duration, familiarity, intent, voice, styleCard, sourcesConfig } = payload;
+    const targetTotalWords = getDurationWords(duration);
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -156,34 +215,36 @@ export const generateAudiobook = task({
       await bumpProgress(generationId, "research", { done: 0, total: chapters.length });
       logger.info("Stage 2: Researching chapters", { generationId, chapterCount: chapters.length });
 
-      const researchResults: ChapterResearch[] = [];
-      for (let i = 0; i < chapters.length; i++) {
+      let completedResearch = 0;
+      const researchResults = await mapWithConcurrency(chapters, RESEARCH_CONCURRENCY, async (chapter, i) => {
         const result = await tasks.triggerAndWait<typeof chapterResearch>("chapter-research", {
           generationId,
           userId,
           chapterIdx: i,
-          chapter: chapters[i],
+          chapter,
+          sourcesConfig,
         });
 
         if (!result.ok) {
           throw new AppError({ stage: "research", provider: "anthropic", code: "child_task_failed", attempt: 1, generationId, chapterIdx: i, retriable: true }, `Chapter ${i} research failed`);
         }
-        researchResults.push(result.output);
-        await bumpProgress(generationId, "research", { done: i + 1, total: chapters.length });
-      }
+        completedResearch += 1;
+        await bumpProgress(generationId, "research", { done: completedResearch, total: chapters.length });
+        return result.output;
+      });
 
       // ── Stage 3: Drafting ─────────────────────────────────────────────────
       await setGenerationStatus(generationId, "drafting");
       await bumpProgress(generationId, "drafting", { done: 0, total: chapters.length });
       logger.info("Stage 3: Drafting chapters", { generationId });
 
-      const drafts: string[] = [];
-      for (let i = 0; i < chapters.length; i++) {
+      let completedDrafts = 0;
+      const drafts = await mapWithConcurrency(chapters, DRAFT_CONCURRENCY, async (chapter, i) => {
         const result = await tasks.triggerAndWait<typeof chapterDraft>("chapter-draft", {
           generationId,
           userId,
           chapterIdx: i,
-          chapter: chapters[i],
+          chapter,
           research: researchResults[i],
           styleCard,
           totalChapters: chapters.length,
@@ -192,60 +253,103 @@ export const generateAudiobook = task({
         if (!result.ok) {
           throw new AppError({ stage: "draft", provider: "anthropic", code: "child_task_failed", attempt: 1, generationId, chapterIdx: i, retriable: true }, `Chapter ${i} draft failed`);
         }
-        drafts.push(result.output);
-        await bumpProgress(generationId, "drafting", { done: i + 1, total: chapters.length });
-      }
+        completedDrafts += 1;
+        await bumpProgress(generationId, "drafting", { done: completedDrafts, total: chapters.length });
+        return result.output;
+      });
 
       // ── Stage 4: Aggregation ──────────────────────────────────────────────
       await setGenerationStatus(generationId, "aggregating");
 
       let fullScript: string;
-      if (existingGeneration?.full_script) {
+      if (existingGeneration?.full_script && isScriptLongEnough(existingGeneration.full_script, targetTotalWords)) {
         fullScript = existingGeneration.full_script;
-        logger.info("Stage 4: Reusing cached full_script", { generationId, wordCount: fullScript.split(/\s+/).length });
+        logger.info("Stage 4: Reusing cached full_script", { generationId, wordCount: countWords(fullScript) });
         await logRunEvent({ generationId, stage: "aggregate", provider: "internal", kind: "info", response: { reused: true } });
       } else {
-        logger.info("Stage 4: Aggregating script", { generationId });
-
-        const aggregatePrompt = buildAggregatePrompt({
-          chapters: chapters.map((c, i) => ({ title: c.title, draft: drafts[i] })),
-          styleCard,
-          targetTotalWords: getDurationWords(duration),
-        });
-
-        const aggStart = Date.now();
-        await logRunEvent({ generationId, stage: "aggregate", provider: "anthropic", kind: "call", attempt: 1 });
-
-        let aggResponse: Anthropic.Message;
-        try {
-          aggResponse = await anthropic.messages.stream({
-            model: "claude-sonnet-4-6",
-            max_tokens: 16000,
-            messages: [{ role: "user", content: aggregatePrompt }],
-          }).finalMessage();
-        } catch (err: unknown) {
-          const e = err as { status?: number; message?: string };
-          throw new AppError({ stage: "aggregate", provider: "anthropic", code: "api_error", upstreamStatus: e.status, attempt: 1, generationId, retriable: true }, `Aggregation failed: ${e.message}`, err as Error);
+        if (existingGeneration?.full_script) {
+          await logRunEvent({
+            generationId,
+            stage: "aggregate",
+            provider: "internal",
+            kind: "info",
+            response: { reused: false, reason: "cached_script_too_short", wordCount: countWords(existingGeneration.full_script), targetTotalWords },
+          });
         }
 
-        await recordProviderUsage({
-          generationId,
-          userId,
-          stage: "aggregate",
-          provider: "anthropic",
-          model: "claude-sonnet-4-6",
-          inputTokens: aggResponse.usage.input_tokens,
-          outputTokens: aggResponse.usage.output_tokens,
-          cachedInputTokens: aggResponse.usage.cache_read_input_tokens ?? 0,
-          cacheCreationInputTokens: aggResponse.usage.cache_creation_input_tokens ?? 0,
-          webSearchRequests: aggResponse.usage.server_tool_use?.web_search_requests ?? 0,
-          durationMs: Date.now() - aggStart,
-        });
+        if (!shouldUseModelAggregation(targetTotalWords)) {
+          fullScript = assembleScriptFromDrafts(drafts);
+          logger.info("Stage 4: Assembled long script locally", { generationId, wordCount: countWords(fullScript), targetTotalWords });
+          await logRunEvent({
+            generationId,
+            stage: "aggregate",
+            provider: "internal",
+            kind: "info",
+            response: { mode: "local_assembly", reason: "target_exceeds_model_output_budget", wordCount: countWords(fullScript), targetTotalWords },
+          });
+          await supabase.from("generations").update({ full_script: fullScript }).eq("id", generationId);
+        } else {
+          logger.info("Stage 4: Aggregating script", { generationId });
 
-        fullScript = aggResponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+          const draftWords = drafts.reduce((sum, draft) => sum + countWords(draft), 0);
+          const aggregatePrompt = buildAggregatePrompt({
+            chapters: chapters.map((c, i) => ({ title: c.title, draft: drafts[i] })),
+            styleCard,
+            targetTotalWords,
+          });
 
-        await logRunEvent({ generationId, stage: "aggregate", provider: "anthropic", kind: "call", attempt: 1, durationMs: Date.now() - aggStart, response: { wordCount: fullScript.split(/\s+/).length } });
-        await supabase.from("generations").update({ full_script: fullScript }).eq("id", generationId);
+          const aggStart = Date.now();
+          await logRunEvent({ generationId, stage: "aggregate", provider: "anthropic", kind: "call", attempt: 1 });
+
+          let aggResponse: Anthropic.Message;
+          try {
+            aggResponse = await anthropic.messages.stream({
+              model: "claude-sonnet-4-6",
+              max_tokens: AGGREGATION_MAX_OUTPUT_TOKENS,
+              messages: [{ role: "user", content: aggregatePrompt }],
+            }).finalMessage();
+          } catch (err: unknown) {
+            const e = err as { status?: number; message?: string };
+            throw new AppError({ stage: "aggregate", provider: "anthropic", code: "api_error", upstreamStatus: e.status, attempt: 1, generationId, retriable: true }, `Aggregation failed: ${e.message}`, err as Error);
+          }
+
+          await recordProviderUsage({
+            generationId,
+            userId,
+            stage: "aggregate",
+            provider: "anthropic",
+            model: "claude-sonnet-4-6",
+            inputTokens: aggResponse.usage.input_tokens,
+            outputTokens: aggResponse.usage.output_tokens,
+            cachedInputTokens: aggResponse.usage.cache_read_input_tokens ?? 0,
+            cacheCreationInputTokens: aggResponse.usage.cache_creation_input_tokens ?? 0,
+            webSearchRequests: aggResponse.usage.server_tool_use?.web_search_requests ?? 0,
+            durationMs: Date.now() - aggStart,
+          });
+
+          const aggregateText = aggResponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+          if (aggResponse.stop_reason === "max_tokens" || !isUsableAggregate(aggregateText, draftWords, targetTotalWords)) {
+            fullScript = assembleScriptFromDrafts(drafts);
+            await logRunEvent({
+              generationId,
+              stage: "aggregate",
+              provider: "internal",
+              kind: "info",
+              response: {
+                mode: "local_assembly",
+                reason: aggResponse.stop_reason === "max_tokens" ? "aggregate_max_tokens" : "aggregate_too_short",
+                aggregateWordCount: countWords(aggregateText),
+                draftWords,
+                targetTotalWords,
+              },
+            });
+          } else {
+            fullScript = aggregateText;
+          }
+
+          await logRunEvent({ generationId, stage: "aggregate", provider: "anthropic", kind: "call", attempt: 1, durationMs: Date.now() - aggStart, response: { stopReason: aggResponse.stop_reason, wordCount: countWords(fullScript) } });
+          await supabase.from("generations").update({ full_script: fullScript }).eq("id", generationId);
+        }
       }
 
       // ── Stage 5: TTS ──────────────────────────────────────────────────────
@@ -255,22 +359,23 @@ export const generateAudiobook = task({
       const chunks = splitIntoChunks(fullScript, MAX_CHUNK_CHARS);
       await bumpProgress(generationId, "tts", { done: 0, total: chunks.length });
 
-      const chunkPaths: string[] = [];
-      for (let i = 0; i < chunks.length; i++) {
+      let completedTts = 0;
+      const chunkPaths = await mapWithConcurrency(chunks, TTS_CONCURRENCY, async (text, i) => {
         const result = await tasks.triggerAndWait<typeof ttsChunk>("tts-chunk", {
           generationId,
           userId,
           chunkIdx: i,
-          text: chunks[i],
+          text,
           voice,
         });
 
         if (!result.ok) {
           throw new AppError({ stage: "tts", provider: "xai", code: "child_task_failed", attempt: 1, generationId, retriable: true }, `TTS chunk ${i} failed`);
         }
-        chunkPaths.push(result.output);
-        await bumpProgress(generationId, "tts", { done: i + 1, total: chunks.length });
-      }
+        completedTts += 1;
+        await bumpProgress(generationId, "tts", { done: completedTts, total: chunks.length });
+        return result.output;
+      });
 
       // Download chunks and stitch with ffmpeg
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `${generationId}-`));
@@ -403,11 +508,60 @@ function splitIntoChunks(text: string, maxChars: number): string[] {
   let current = "";
 
   for (const para of paragraphs) {
-    if (current.length + para.length + 2 > maxChars && current.length > 0) {
+    const parts = splitOversizedText(para.trim(), maxChars);
+    for (const part of parts) {
+      if (current.length + part.length + 2 > maxChars && current.length > 0) {
+        chunks.push(current.trim());
+        current = part;
+      } else {
+        current = current ? `${current}\n\n${part}` : part;
+      }
+    }
+  }
+
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}
+
+function splitOversizedText(text: string, maxChars: number): string[] {
+  if (text.length <= maxChars) return text ? [text] : [];
+
+  const sentenceParts = text.match(/[^.!?]+[.!?]+["')\]]*|[^.!?]+$/g) ?? [text];
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const sentence of sentenceParts.map((s) => s.trim()).filter(Boolean)) {
+    if (sentence.length > maxChars) {
+      if (current.trim()) {
+        chunks.push(current.trim());
+        current = "";
+      }
+      chunks.push(...splitByWords(sentence, maxChars));
+      continue;
+    }
+
+    if (current.length + sentence.length + 1 > maxChars && current.length > 0) {
       chunks.push(current.trim());
-      current = para;
+      current = sentence;
     } else {
-      current = current ? `${current}\n\n${para}` : para;
+      current = current ? `${current} ${sentence}` : sentence;
+    }
+  }
+
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}
+
+function splitByWords(text: string, maxChars: number): string[] {
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (current.length + word.length + 1 > maxChars && current.length > 0) {
+      chunks.push(current.trim());
+      current = word;
+    } else {
+      current = current ? `${current} ${word}` : word;
     }
   }
 

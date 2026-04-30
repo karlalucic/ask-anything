@@ -37,7 +37,7 @@ export default function LoginForm() {
       setLoading(false);
       return;
     }
-    posthog.identify(session.user.id, { email: session.user.email });
+    posthog.identify(session.user.id);
     posthog.capture("user_logged_in", { method: "email" });
     router.replace(next);
     router.refresh();

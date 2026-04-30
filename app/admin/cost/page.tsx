@@ -1,13 +1,6 @@
 import { notFound } from "next/navigation";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
-
-function isAdminUserId(userId: string): boolean {
-  const allowed = (process.env.ADMIN_USER_IDS ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return allowed.includes(userId);
-}
+import { isAdminUser } from "@/lib/admin";
 
 interface UsageRow {
   id: number;
@@ -50,7 +43,7 @@ function fmtUsd(n: number): string {
 export default async function AdminCostPage() {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !isAdminUserId(user.id)) notFound();
+  if (!isAdminUser(user)) notFound();
 
   const service = createSupabaseServiceClient();
 

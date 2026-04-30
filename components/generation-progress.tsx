@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toChapter, toGeneration } from "@/lib/supabase/mappers";
 import type { Generation, Chapter, GenerationStatus } from "@/lib/types";
@@ -28,10 +29,12 @@ interface Props {
 }
 
 export function GenerationProgress({ generationId, initialGeneration, initialChapters }: Props) {
+  const router = useRouter();
   const [generation, setGeneration] = useState(initialGeneration);
   const [chapters, setChapters] = useState(initialChapters);
   const lastEventAt = useRef(0);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const refreshedForAudioRef = useRef(false);
 
   const fetchLatest = useCallback(async () => {
     const res = await fetch(`/api/generations/${generationId}`);
@@ -83,6 +86,12 @@ export function GenerationProgress({ generationId, initialGeneration, initialCha
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
   }, [generationId, generation.status, fetchLatest]);
+
+  useEffect(() => {
+    if (generation.status !== "complete" || !generation.audioPath || refreshedForAudioRef.current) return;
+    refreshedForAudioRef.current = true;
+    router.refresh();
+  }, [generation.audioPath, generation.status, router]);
 
   const currentStageIdx = stageIndex(generation.status as GenerationStatus);
   const isTerminal = ["complete", "failed", "canceled"].includes(generation.status);

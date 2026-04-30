@@ -30,7 +30,7 @@ function SignupInner() {
     const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo } });
     if (error) { setError(error.message); setLoading(false); return; }
     if (data.user) {
-      posthog.identify(data.user.id, { email: data.user.email });
+      posthog.identify(data.user.id);
       posthog.capture("user_signed_up", { method: "email" });
     }
     setDone(true);

@@ -1,17 +1,13 @@
 import { notFound, redirect } from "next/navigation";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
-
-function isAdmin(email: string | undefined): boolean {
-  if (!email) return false;
-  return (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim()).includes(email);
-}
+import { isAdminUser } from "@/lib/admin";
 
 export default async function AdminRunPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !isAdmin(user.email)) redirect("/");
+  if (!isAdminUser(user)) redirect("/");
 
   const serviceClient = createSupabaseServiceClient();
 

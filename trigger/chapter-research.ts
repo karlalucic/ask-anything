@@ -1,21 +1,27 @@
 import { task, logger } from "@trigger.dev/sdk/v3";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
-import { buildResearchSystemPrompt, buildResearchUserPrompt, RESEARCH_TOOLS } from "../lib/prompts/research";
+import { buildResearchSystemPrompt, buildResearchTools, buildResearchUserPrompt } from "../lib/prompts/research";
 import { setChapterStatus, logRunEvent } from "../lib/supabase/progress";
 import { recordProviderUsage } from "../lib/usage/record";
 import { AppError, truncateForStorage } from "../lib/errors";
 import { normalizeChapterResearch } from "../lib/research";
-import type { ChapterPlan, ChapterResearch } from "../lib/types";
+import type { ChapterPlan, ChapterResearch, SourcesConfig } from "../lib/types";
 
-const MAX_ITERATIONS = 5;
+const MAX_ITERATIONS = 3;
 
 export const chapterResearch = task({
   id: "chapter-research",
   queue: { name: "chapter-research", concurrencyLimit: 2 },
   maxDuration: 600,
-  run: async (payload: { generationId: string; userId?: string; chapterIdx: number; chapter: ChapterPlan }) => {
-    const { generationId, userId, chapterIdx, chapter } = payload;
+  run: async (payload: {
+    generationId: string;
+    userId?: string;
+    chapterIdx: number;
+    chapter: ChapterPlan;
+    sourcesConfig?: SourcesConfig;
+  }) => {
+    const { generationId, userId, chapterIdx, chapter, sourcesConfig } = payload;
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,7 +36,7 @@ export const chapterResearch = task({
       .eq("idx", chapterIdx)
       .single();
 
-    if (existing?.research && existing.status === "done" || existing?.status === "drafting") {
+    if (existing?.research && (existing.status === "done" || existing.status === "drafting")) {
       logger.info("Chapter research already complete, skipping", { generationId, chapterIdx });
       return normalizeChapterResearch(existing.research);
     }
@@ -39,8 +45,9 @@ export const chapterResearch = task({
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const messages: Anthropic.MessageParam[] = [
-      { role: "user", content: buildResearchUserPrompt(chapter) },
+      { role: "user", content: buildResearchUserPrompt(chapter, sourcesConfig) },
     ];
+    const tools = buildResearchTools(sourcesConfig) as Anthropic.Tool[];
 
     let research: ChapterResearch | null = null;
     const startTime = Date.now();
@@ -62,9 +69,9 @@ export const chapterResearch = task({
         response = await anthropic.messages.create({
           model: "claude-sonnet-4-6",
           max_tokens: 4096,
-          system: buildResearchSystemPrompt(),
+          system: buildResearchSystemPrompt(sourcesConfig),
           messages,
-          tools: RESEARCH_TOOLS as Anthropic.Tool[],
+          tools,
         });
       } catch (err: unknown) {
         const errObj = err as { status?: number; message?: string };
@@ -167,7 +174,7 @@ export const chapterResearch = task({
         content: toolUses.map((tu) => ({
           type: "tool_result" as const,
           tool_use_id: tu.id,
-          content: "Search completed. Please continue researching or call done.",
+          content: "Search completed or the search budget has been reached. Please continue only if necessary, otherwise call done.",
         })),
       });
     }

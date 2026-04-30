@@ -35,6 +35,9 @@ ${research.quotableEvidence.map((q) => `- ${q}`).join("\n")}
 
 INSTRUCTIONS:
 - Write for audio — use spoken language, no bullet lists, no markdown headers
+- This chapter will be assembled directly with the surrounding chapters, so open and close with natural continuity rather than labels or recap-heavy framing
+- If this is not the first chapter, orient the listener in one sentence without reintroducing the entire topic
+- If this is not the final chapter, end with a subtle handoff into the next idea rather than a hard conclusion
 - Use natural speech-control markers where appropriate: [pause] for emphasis, [laugh] for warmth
 - Attribute sources naturally in speech ("According to...", "Researchers at MIT found...")
 - Hit the target word count ±10%

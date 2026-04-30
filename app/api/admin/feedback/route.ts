@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
+import { isAdminUser } from "@/lib/admin";
 
-function isAdmin(email: string | undefined): boolean {
-  if (!email) return false;
-  const admins = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim());
-  return admins.includes(email);
+function csvCell(value: unknown): string {
+  const raw = value == null ? "" : String(value);
+  const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+  return `"${safe.replace(/"/g, '""')}"`;
 }
 
 export async function GET(req: NextRequest) {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !isAdmin(user.email)) {
+  if (!isAdminUser(user)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
     const header = "id,generation_id,user_id,rating,note,created_at,topic,duration,voice\n";
     const rows = (data ?? []).map((r: Record<string, unknown>) => {
       const gen = r.generations as { topic?: string; duration?: string; voice?: string } | null;
-      return [r.id, r.generation_id, r.user_id ?? "", r.rating, JSON.stringify(r.note ?? ""), r.created_at, gen?.topic ?? "", gen?.duration ?? "", gen?.voice ?? ""].join(",");
+      return [r.id, r.generation_id, r.user_id ?? "", r.rating, r.note ?? "", r.created_at, gen?.topic ?? "", gen?.duration ?? "", gen?.voice ?? ""].map(csvCell).join(",");
     }).join("\n");
     return new NextResponse(header + rows, {
       headers: { "Content-Type": "text/csv", "Content-Disposition": 'attachment; filename="feedback.csv"' },

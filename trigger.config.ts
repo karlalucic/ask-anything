@@ -5,7 +5,7 @@ export default defineConfig({
   project: "proj_fexygvvinpllpdadijva",
   runtime: "node",
   logLevel: "log",
-  maxDuration: 3600,
+  maxDuration: 10800,
   retries: {
     enabledInDev: false,
     default: {

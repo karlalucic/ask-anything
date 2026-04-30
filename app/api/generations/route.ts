@@ -8,26 +8,26 @@ import { captureServerEvent } from "@/lib/posthog-server";
 
 const bodySchema = z.object({
   topic: z.string().min(1).max(1500),
-  duration: z.number().int().min(5).max(45),
+  duration: z.number().int().min(5).max(90),
   familiarity: z.enum(["beginner", "intermediate", "advanced"]),
   intent: z.enum(["curious", "work", "comparing", "deep_dive"]),
   voice: z.enum(["eve", "ara", "rex", "sal", "leo"]),
   styleInput: z.string().min(1).max(200),
   styleCard: z.object({
-    openingPattern: z.string(),
-    chapterShape: z.string(),
-    sentenceRhythm: z.string(),
-    signatureMoves: z.array(z.string()),
+    openingPattern: z.string().max(1000),
+    chapterShape: z.string().max(1000),
+    sentenceRhythm: z.string().max(1000),
+    signatureMoves: z.array(z.string().max(300)).max(8),
     targetWordCountRange: z.tuple([z.number(), z.number()]),
   }),
-  styleFollowups: z.array(z.object({ q: z.string(), a: z.string() })).optional(),
+  styleFollowups: z.array(z.object({ q: z.string().max(500), a: z.string().max(500) })).max(5).optional(),
   sourcesConfig: z.object({
     web: z.boolean(),
     academic: z.boolean(),
     userDocs: z.boolean(),
     recency: z.enum(["any", "past_year", "past_month", "past_week"]),
-    domains: z.array(z.string()),
-    userDocIds: z.array(z.string()),
+    domains: z.array(z.string().max(253)).max(10),
+    userDocIds: z.array(z.string().uuid()).max(20),
   }),
 });
 
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
     event: "generation_created",
     properties: {
       generation_id: row.id,
-      topic: parsed.data.topic,
+      topic_length: parsed.data.topic.length,
       duration: parsed.data.duration,
       familiarity: parsed.data.familiarity,
       intent: parsed.data.intent,

@@ -7,14 +7,14 @@ import { recordProviderUsage } from "@/lib/usage/record";
 
 const bodySchema = z.object({
   styleCard: z.object({
-    openingPattern: z.string(),
-    chapterShape: z.string(),
-    sentenceRhythm: z.string(),
-    signatureMoves: z.array(z.string()),
+    openingPattern: z.string().max(1000),
+    chapterShape: z.string().max(1000),
+    sentenceRhythm: z.string().max(1000),
+    signatureMoves: z.array(z.string().max(300)).max(8),
     targetWordCountRange: z.tuple([z.number(), z.number()]),
   }),
-  followups: z.array(z.string()),
-  answers: z.array(z.string()),
+  followups: z.array(z.string().max(500)).max(5),
+  answers: z.array(z.string().max(500)).max(5),
 });
 
 export async function POST(req: NextRequest) {
