@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Copy, LinkIcon, Lock, RefreshCw, Users, X } from "lucide-react";
+import { Check, Copy, LinkIcon, Lock, RefreshCw, Users, X } from "lucide-react";
 import posthog from "posthog-js";
 import { Button } from "@/components/ui/button";
 
@@ -31,8 +31,58 @@ function formatDate(value: string): string {
   return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-async function copyUrl(url: string) {
-  await navigator.clipboard.writeText(url);
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through to legacy fallback
+  }
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+function CopyableUrl({ url, initiallyCopied }: { url: string; initiallyCopied: boolean }) {
+  const [copied, setCopied] = useState(initiallyCopied);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  async function handleCopy() {
+    const ok = await copyToClipboard(url);
+    if (ok) setCopied(true);
+  }
+
+  return (
+    <div className="mt-3 flex items-center gap-2">
+      <input
+        readOnly
+        value={url}
+        onFocus={(e) => e.currentTarget.select()}
+        onClick={(e) => e.currentTarget.select()}
+        className="flex-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 font-mono text-xs text-white/80 outline-none focus:border-white/30"
+      />
+      <Button size="icon-sm" variant="outline" type="button" onClick={handleCopy} aria-label="Copy URL">
+        {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+      </Button>
+    </div>
+  );
 }
 
 export function ShareControls({
@@ -49,6 +99,10 @@ export function ShareControls({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [publicLinkUrl, setPublicLinkUrl] = useState<string | null>(null);
+  const [publicLinkJustCopied, setPublicLinkJustCopied] = useState(false);
+  const [pendingInviteUrl, setPendingInviteUrl] = useState<string | null>(null);
+  const [pendingInviteJustCopied, setPendingInviteJustCopied] = useState(false);
 
   const refreshShares = useCallback(async () => {
     const res = await fetch(`/api/generations/${generationId}/shares`);
@@ -58,90 +112,110 @@ export function ShareControls({
     setInvites(json.invites ?? []);
   }, [generationId]);
 
-  async function createOrCopyPublicLink() {
-    setLoading(true);
+  function clearStatus() {
     setError("");
     setMessage("");
-    const res = await fetch(`/api/generations/${generationId}/public-link`, { method: "POST" });
-    if (!res.ok) {
-      const json = await res.json().catch(() => ({}));
-      setError(json.error ?? "Could not create public link.");
+  }
+
+  async function createOrCopyPublicLink() {
+    setLoading(true);
+    clearStatus();
+    try {
+      const res = await fetch(`/api/generations/${generationId}/public-link`, { method: "POST" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setError(json.error ?? "Could not create public link.");
+        return;
+      }
+      const { token } = await res.json();
+      const url = `${window.location.origin}/s/${token}`;
+      setPublicLinkUrl(url);
+      setVisibility("public");
+      const copied = await copyToClipboard(url);
+      setPublicLinkJustCopied(copied);
+      setMessage(copied ? "Public link copied." : "Link ready — copy it from the field below.");
+      posthog.capture("public_share_link_copied", { generation_id: generationId, copied });
+    } finally {
       setLoading(false);
-      return;
     }
-    const { token } = await res.json();
-    await copyUrl(`${window.location.origin}/s/${token}`);
-    setVisibility("public");
-    setMessage("Public link copied.");
-    posthog.capture("public_share_link_copied", { generation_id: generationId });
-    setLoading(false);
   }
 
   async function disablePublicLink() {
     setLoading(true);
-    setError("");
-    setMessage("");
-    const res = await fetch(`/api/generations/${generationId}/public-link`, { method: "DELETE" });
-    if (!res.ok) {
-      const json = await res.json().catch(() => ({}));
-      setError(json.error ?? "Could not make this private.");
+    clearStatus();
+    try {
+      const res = await fetch(`/api/generations/${generationId}/public-link`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setError(json.error ?? "Could not make this private.");
+        return;
+      }
+      setVisibility("private");
+      setPublicLinkUrl(null);
+      setPublicLinkJustCopied(false);
+      setMessage("Public link revoked.");
+    } finally {
       setLoading(false);
-      return;
     }
-    setVisibility("private");
-    setMessage("Public link revoked.");
-    setLoading(false);
   }
 
   async function createInvite() {
     setLoading(true);
-    setError("");
-    setMessage("");
-    const res = await fetch(`/api/generations/${generationId}/invites`, { method: "POST" });
-    if (!res.ok) {
-      const json = await res.json().catch(() => ({}));
-      setError(json.error ?? "Could not create invite.");
+    clearStatus();
+    try {
+      const res = await fetch(`/api/generations/${generationId}/invites`, { method: "POST" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setError(json.error ?? "Could not create invite.");
+        return;
+      }
+      const { token } = await res.json();
+      const url = `${window.location.origin}/claim/${token}`;
+      setPendingInviteUrl(url);
+      const copied = await copyToClipboard(url);
+      setPendingInviteJustCopied(copied);
+      setMessage(copied ? "Invite link copied." : "Invite ready — copy it from the field below.");
+      posthog.capture("private_share_invite_copied", { generation_id: generationId, copied });
+      await refreshShares();
+    } finally {
       setLoading(false);
-      return;
     }
-    const { token } = await res.json();
-    await copyUrl(`${window.location.origin}/claim/${token}`);
-    setMessage("Invite link copied.");
-    posthog.capture("private_share_invite_copied", { generation_id: generationId });
-    await refreshShares();
-    setLoading(false);
   }
 
   async function revokeInvite(tokenHash: string) {
     setLoading(true);
-    setError("");
-    setMessage("");
-    const res = await fetch(`/api/generations/${generationId}/invites/${tokenHash}`, { method: "DELETE" });
-    if (!res.ok) {
-      const json = await res.json().catch(() => ({}));
-      setError(json.error ?? "Could not revoke invite.");
+    clearStatus();
+    try {
+      const res = await fetch(`/api/generations/${generationId}/invites/${tokenHash}`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setError(json.error ?? "Could not revoke invite.");
+        return;
+      }
+      setPendingInviteUrl(null);
+      setPendingInviteJustCopied(false);
+      await refreshShares();
+      setMessage("Invite revoked.");
+    } finally {
       setLoading(false);
-      return;
     }
-    await refreshShares();
-    setMessage("Invite revoked.");
-    setLoading(false);
   }
 
   async function revokeShare(shareId: string) {
     setLoading(true);
-    setError("");
-    setMessage("");
-    const res = await fetch(`/api/generations/${generationId}/shares/${shareId}`, { method: "DELETE" });
-    if (!res.ok) {
-      const json = await res.json().catch(() => ({}));
-      setError(json.error ?? "Could not revoke access.");
+    clearStatus();
+    try {
+      const res = await fetch(`/api/generations/${generationId}/shares/${shareId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setError(json.error ?? "Could not revoke access.");
+        return;
+      }
+      await refreshShares();
+      setMessage("Access revoked.");
+    } finally {
       setLoading(false);
-      return;
     }
-    await refreshShares();
-    setMessage("Access revoked.");
-    setLoading(false);
   }
 
   return (
@@ -193,6 +267,9 @@ export function ShareControls({
                     </Button>
                   )}
                 </div>
+                {publicLinkUrl && visibility === "public" && (
+                  <CopyableUrl key={publicLinkUrl} url={publicLinkUrl} initiallyCopied={publicLinkJustCopied} />
+                )}
               </section>
 
               <section className="rounded-lg border border-white/10 p-4">
@@ -203,11 +280,18 @@ export function ShareControls({
                   </div>
                   <Button size="xs" variant="outline" type="button" onClick={createInvite} disabled={loading}>
                     <Copy aria-hidden />
-                    Copy invite
+                    {pendingInviteUrl ? "New invite" : "Copy invite"}
                   </Button>
                 </div>
 
-                <div className="space-y-2">
+                {pendingInviteUrl && (
+                  <>
+                    <p className="text-xs text-white/40">Send this link to someone with an account. It only appears here once.</p>
+                    <CopyableUrl key={pendingInviteUrl} url={pendingInviteUrl} initiallyCopied={pendingInviteJustCopied} />
+                  </>
+                )}
+
+                <div className={pendingInviteUrl ? "mt-4 space-y-2" : "space-y-2"}>
                   {invites.length === 0 && shares.length === 0 ? (
                     <p className="text-sm text-white/35">No account invites or shared recipients yet.</p>
                   ) : (
