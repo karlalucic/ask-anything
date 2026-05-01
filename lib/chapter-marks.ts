@@ -4,8 +4,8 @@ import type { ChapterMark } from "@/components/audio-player";
 /**
  * Compute per-chapter start timestamps for navigation. We allocate the total
  * audio duration across chapters proportional to each chapter's draft word
- * count. This is approximate — voice cadence and punctuation cause the
- * mapping to drift a few seconds per chapter — but it's accurate enough to
+ * count. This is approximate; voice cadence and punctuation cause the
+ * mapping to drift a few seconds per chapter, but it's accurate enough to
  * jump close to a chapter boundary, and exact-stamp ffprobe-during-stitch is
  * a separate (heavier) change.
  *

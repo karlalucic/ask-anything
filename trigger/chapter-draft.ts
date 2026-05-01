@@ -78,7 +78,7 @@ export const chapterDraft = task({
         model: "claude-opus-4-7",
         max_tokens: 8192,
         // Style card + instructions are identical for every chapter in this
-        // generation — cache the system prefix so chapters 2..N read it back
+        // generation, so cache the system prefix and chapters 2..N read it back
         // at the cached-input rate.
         system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: user }],
@@ -111,7 +111,7 @@ export const chapterDraft = task({
       );
     }
 
-    // Record usage IMMEDIATELY — before any throwing logic (max_tokens check, downstream upload).
+    // Record usage IMMEDIATELY: before any throwing logic (max_tokens check, downstream upload).
     await recordProviderUsage({
       generationId,
       userId,
@@ -137,7 +137,7 @@ export const chapterDraft = task({
           chapterIdx,
           retriable: true,
         },
-        "Draft response truncated by max_tokens — consider reducing targetWords",
+        "Draft response truncated by max_tokens; consider reducing targetWords",
       );
     }
 

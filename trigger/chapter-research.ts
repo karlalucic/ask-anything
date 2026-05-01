@@ -54,7 +54,7 @@ export const chapterResearch = task({
 
     // System prompt and tools are identical across every chapter in a
     // generation. Mark the last tool with cache_control so the entire
-    // (system + tools) prefix becomes a cache breakpoint — the second and
+    // (system + tools) prefix becomes a cache breakpoint. The second and
     // third tool-loop iterations within a chapter read it back at the
     // cached-input rate.
     const baseTools = buildResearchTools(sourcesConfig) as Anthropic.Tool[];
@@ -120,7 +120,7 @@ export const chapterResearch = task({
       const toolUseCount = response.content.filter((b) => b.type === "tool_use").length;
       const webSearchRequests = response.usage.server_tool_use?.web_search_requests ?? 0;
 
-      // Record usage FIRST — provider has charged us; row must exist even if logRunEvent
+      // Record usage FIRST: provider has charged us; row must exist even if logRunEvent
       // (or anything downstream) fails.
       await recordProviderUsage({
         generationId,

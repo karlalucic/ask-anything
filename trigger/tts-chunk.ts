@@ -116,7 +116,7 @@ export const ttsChunk = task({
       );
     }
 
-    // Record usage IMMEDIATELY — xAI has charged us for the synthesis even if
+    // Record usage IMMEDIATELY: xAI has charged us for the synthesis even if
     // the audio is undersized or upload fails downstream.
     await recordProviderUsage({
       generationId,

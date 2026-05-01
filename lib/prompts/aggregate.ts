@@ -75,7 +75,7 @@ export function parseAggregateResponse(
   expectedChapterCount: number,
 ): string[] | null {
   // Tolerate the model wrapping the JSON in markdown fences or adding a stray
-  // line before/after — extract the first balanced JSON object.
+  // line before/after, so extract the first balanced JSON object.
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) return null;
 

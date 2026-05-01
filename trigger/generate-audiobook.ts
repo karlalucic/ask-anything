@@ -313,8 +313,8 @@ export const generateAudiobook = task({
 
           const aggregateText = aggResponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
           // Aggregation now returns structured JSON: { chapters: [{ idx, polished }] }.
-          // Parsing it lets us keep per-chapter TTS chunking after the polish pass —
-          // the alternative (treating the polished text as one big string and chunking
+          // Parsing it lets us keep per-chapter TTS chunking after the polish pass.
+          // The alternative (treating the polished text as one big string and chunking
           // monolithically) leaves TTS concurrency on the floor and reintroduces
           // arbitrary mid-paragraph audio boundaries we'd just removed at the draft
           // stage.
@@ -384,7 +384,7 @@ export const generateAudiobook = task({
 
       // Download chunks and stitch with ffmpeg. These are plain Supabase
       // storage HTTP calls (not Trigger.dev wait functions), so Promise.all
-      // is safe — saves several seconds for a typical 10-20 chunk run.
+      // is safe; saves several seconds for a typical 10-20 chunk run.
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `${generationId}-`));
 
       const localPaths = await Promise.all(
@@ -411,7 +411,7 @@ export const generateAudiobook = task({
         // stream-copy concat produces corrupted frames at the joins:
         // mid-word cuts, dropouts, "stops randomly" on playback. Re-encoding
         // normalizes the entire output stream and adds 5-10s of CPU on
-        // stitch — small price for clean audio.
+        // stitch; small price for clean audio.
         await execa(
           "ffmpeg",
           [
@@ -438,7 +438,7 @@ export const generateAudiobook = task({
         });
         durationSeconds = Math.round(parseFloat(stdout));
       } catch {
-        // Non-fatal — duration just won't be set
+        // Non-fatal; duration just won't be set
       }
 
       // Upload final MP3
@@ -452,7 +452,7 @@ export const generateAudiobook = task({
         throw new AppError({ stage: "storage", provider: "supabase", code: "upload_failed", attempt: 1, generationId, retriable: true }, `Failed to upload final audio: ${audioUploadError.message}`);
       }
 
-      // Cleanup tmp and tts-chunks. The remove() API accepts a list — one
+      // Cleanup tmp and tts-chunks. The remove() API accepts a list, so one
       // round trip beats N sequential ones.
       fs.rmSync(tmpDir, { recursive: true, force: true });
       if (chunkPaths.length > 0) {

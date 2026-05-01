@@ -24,7 +24,7 @@ export function buildDraftPrompt(params: {
   const { chapter, styleCard, chapterNumber, totalChapters, isFirst, isLast, prevChapter, nextChapter } = params;
   const research = normalizeChapterResearch(params.research);
 
-  // Stable across all chapters of one generation — cache target.
+  // Stable across all chapters of one generation, so a good cache target.
   const system = `You are writing chapters of an audio briefing. Each chapter you write will be assembled directly with the surrounding chapters, so open and close with natural continuity rather than labels or recap-heavy framing. Apply the style card below precisely.
 
 STYLE CARD:
