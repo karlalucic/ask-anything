@@ -9,7 +9,13 @@ const MIN_CHUNK_BYTES = 1024;
 
 export const ttsChunk = task({
   id: "tts-chunk",
-  queue: { name: "tts-chunk", concurrencyLimit: 3 },
+  // Bumped from 3 to 6: lets long-form generations run all their chunks
+  // simultaneously instead of in 2-3 sequential batches. Each request is the
+  // same size as before, so we're not changing per-request behavior; just
+  // letting xAI's queue see them all at once. The task already retries 429s
+  // (status >= 500 || status === 429 → retriable) so a brief rate-limit blip
+  // won't fail the run.
+  queue: { name: "tts-chunk", concurrencyLimit: 6 },
   maxDuration: 300,
   run: async (payload: {
     generationId: string;
