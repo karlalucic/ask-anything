@@ -23,7 +23,7 @@ const AGGREGATION_MAX_OUTPUT_TOKENS = 16000;
 // Above it, drafts are concatenated locally; chapter-level continuity prompts
 // already produce smooth seams without a model pass.
 const MODEL_AGGREGATION_WORD_LIMIT = 5000;
-const OUTLINE_MODEL = "claude-haiku-4-5-20251001";
+const OUTLINE_MODEL = "claude-sonnet-4-6";
 const OUTLINE_MAX_TOKENS = 4096;
 const AGGREGATION_MODEL = "claude-sonnet-4-6";
 
@@ -219,6 +219,8 @@ export const generateAudiobook = task({
             research: researchResults[i],
             styleCard,
             totalChapters: chapters.length,
+            prevChapter: i > 0 ? { title: chapters[i - 1].title, thesis: chapters[i - 1].thesis } : null,
+            nextChapter: i < chapters.length - 1 ? { title: chapters[i + 1].title, thesis: chapters[i + 1].thesis } : null,
           },
         })),
       );

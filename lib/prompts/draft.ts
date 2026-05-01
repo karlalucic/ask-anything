@@ -16,8 +16,12 @@ export function buildDraftPrompt(params: {
   totalChapters: number;
   isFirst: boolean;
   isLast: boolean;
+  /** Title + thesis of the preceding chapter, when it exists. Helps the writer orient. */
+  prevChapter?: { title: string; thesis: string } | null;
+  /** Title + thesis of the following chapter, when it exists. Helps the writer set up a handoff. */
+  nextChapter?: { title: string; thesis: string } | null;
 }): { system: string; user: string } {
-  const { chapter, styleCard, chapterNumber, totalChapters, isFirst, isLast } = params;
+  const { chapter, styleCard, chapterNumber, totalChapters, isFirst, isLast, prevChapter, nextChapter } = params;
   const research = normalizeChapterResearch(params.research);
 
   // Stable across all chapters of one generation — cache target.
@@ -46,7 +50,22 @@ INSTRUCTIONS:
       ? "This is the FINAL chapter — provide a satisfying close to the entire briefing."
       : "";
 
-  const user = `Write Chapter ${chapterNumber} of ${totalChapters}.${positionNote ? `\n${positionNote}` : ""}
+  // Adjacent chapter context. Each chapter is drafted in isolation, so without
+  // this the model has no awareness of where the briefing has been or where it's
+  // headed. Surfacing one-line summaries of the neighbours lets the draft open
+  // and close in character: a referenced callback into the previous chapter's
+  // idea, a deliberate handoff into the next chapter's. Reduces what aggregation
+  // has to repair downstream.
+  const neighbourContext: string[] = [];
+  if (prevChapter) {
+    neighbourContext.push(`PRECEDING CHAPTER (${chapterNumber - 1}): "${prevChapter.title}" — ${prevChapter.thesis}`);
+  }
+  if (nextChapter) {
+    neighbourContext.push(`FOLLOWING CHAPTER (${chapterNumber + 1}): "${nextChapter.title}" — ${nextChapter.thesis}`);
+  }
+  const neighbourBlock = neighbourContext.length > 0 ? `\n\n${neighbourContext.join("\n")}` : "";
+
+  const user = `Write Chapter ${chapterNumber} of ${totalChapters}.${positionNote ? `\n${positionNote}` : ""}${neighbourBlock}
 
 CHAPTER TITLE: ${chapter.title}
 THESIS: ${chapter.thesis}
