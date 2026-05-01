@@ -10,7 +10,9 @@ import type { ChapterPlan, ChapterResearch, StyleCard } from "../lib/types";
 
 export const chapterDraft = task({
   id: "chapter-draft",
-  queue: { name: "chapter-draft", concurrencyLimit: 2 },
+  // Bumped from 2 to 6 to match chapter-research. Lets all chapters draft in
+  // parallel instead of in 3 sequential batches.
+  queue: { name: "chapter-draft", concurrencyLimit: 6 },
   maxDuration: 600,
   run: async (payload: {
     generationId: string;
