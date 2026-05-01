@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { captureServerEvent } from "@/lib/posthog-server";
 import { hashShareToken } from "@/lib/sharing";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
+import { serverError } from "@/lib/api-errors";
 
 type InviteRow = {
   token_hash: string;
@@ -144,7 +145,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     createdBy: inviteRow.created_by,
   });
 
-  if (shareError) return NextResponse.json({ error: shareError.message }, { status: 500 });
+  if (shareError) return serverError(shareError, { route: "POST /api/share-invites/[token]/claim", userId: user.id });
 
   captureServerEvent({
     distinctId: user.id,

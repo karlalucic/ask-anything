@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { buildStyleRefinePrompt } from "@/lib/prompts/style";
 import { recordProviderUsage } from "@/lib/usage/record";
+import { serverError } from "@/lib/api-errors";
 
 const bodySchema = z.object({
   styleCard: z.object({
@@ -37,11 +38,12 @@ export async function POST(req: NextRequest) {
       messages: [{ role: "user", content: buildStyleRefinePrompt(parsed.data) }],
     });
   } catch (err: unknown) {
-    const e = err as { status?: number; message?: string };
-    return NextResponse.json(
-      { error: `Anthropic API error: ${e.message ?? "unknown"}` },
-      { status: e.status ?? 500 },
-    );
+    const e = err as { status?: number };
+    const status = e.status ?? 500;
+    if (status >= 400 && status < 500) {
+      return NextResponse.json({ error: "Style refine failed. Please try again." }, { status });
+    }
+    return serverError(err, { route: "POST /api/style/refine", userId: user.id });
   }
   await recordProviderUsage({
     userId: user.id,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { captureServerEvent } from "@/lib/posthog-server";
 import { generateShareToken, hashShareToken } from "@/lib/sharing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { serverError } from "@/lib/api-errors";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   let token = generateShareToken();
   let tokenHash = hashShareToken(token);
-  let insertError: { message?: string } | null = null;
+  let insertError: unknown = null;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     token = generateShareToken();
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!error) break;
   }
 
-  if (insertError) return NextResponse.json({ error: insertError.message ?? "Failed to create invite" }, { status: 500 });
+  if (insertError) return serverError(insertError, { route: "POST /api/generations/[id]/invites", userId: user.id });
 
   captureServerEvent({
     distinctId: user.id,

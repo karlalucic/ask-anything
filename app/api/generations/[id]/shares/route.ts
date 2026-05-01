@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
+import { serverError } from "@/lib/api-errors";
 
 type ProfileRow = {
   id: string;
@@ -39,8 +40,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .order("created_at", { ascending: false }),
   ]);
 
-  if (sharesError) return NextResponse.json({ error: sharesError.message }, { status: 500 });
-  if (invitesError) return NextResponse.json({ error: invitesError.message }, { status: 500 });
+  if (sharesError) return serverError(sharesError, { route: "GET /api/generations/[id]/shares (shares)", userId: user.id });
+  if (invitesError) return serverError(invitesError, { route: "GET /api/generations/[id]/shares (invites)", userId: user.id });
 
   const profileIds = Array.from(new Set([
     ...(shares ?? []).map((share) => share.shared_with as string),

@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { captureServerEvent } from "@/lib/posthog-server";
+import { serverError } from "@/lib/api-errors";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10MB
+
+const urlBodySchema = z.object({
+  url: z.string().url().refine((u) => /^https?:\/\//i.test(u), "Only http(s) URLs are allowed"),
+  title: z.string().max(500).optional(),
+});
 
 export async function POST(req: NextRequest) {
   const supabase = await createSupabaseServerClient();
@@ -24,7 +31,7 @@ export async function POST(req: NextRequest) {
       .from("user-docs")
       .upload(storagePath, file, { contentType: "application/pdf" });
 
-    if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    if (uploadError) return serverError(uploadError, { route: "POST /api/documents (pdf)", userId: user.id });
 
     const { data, error } = await supabase.from("user_documents").insert({
       id: docId,
@@ -35,7 +42,7 @@ export async function POST(req: NextRequest) {
       bytes: file.size,
     }).select("id, title, kind, bytes, created_at").single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return serverError(error, { route: "POST /api/documents (pdf insert)", userId: user.id });
     captureServerEvent({
       distinctId: user.id,
       event: "document_uploaded",
@@ -45,8 +52,15 @@ export async function POST(req: NextRequest) {
   }
 
   // URL submission
-  const { url, title } = await req.json();
-  if (!url) return NextResponse.json({ error: "url is required" }, { status: 400 });
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  const parsed = urlBodySchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "Invalid url" }, { status: 400 });
+  const { url, title } = parsed.data;
 
   const { data, error } = await supabase.from("user_documents").insert({
     user_id: user.id,
@@ -55,7 +69,7 @@ export async function POST(req: NextRequest) {
     title: title ?? url,
   }).select("id, title, kind, source_url, created_at").single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error, { route: "POST /api/documents (url)", userId: user.id });
   captureServerEvent({
     distinctId: user.id,
     event: "document_uploaded",
@@ -75,6 +89,6 @@ export async function GET() {
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error, { route: "GET /api/documents", userId: user.id });
   return NextResponse.json({ documents: data });
 }

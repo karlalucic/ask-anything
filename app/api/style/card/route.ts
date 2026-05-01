@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { buildStyleCardPrompt } from "@/lib/prompts/style";
 import { recordProviderUsage } from "@/lib/usage/record";
+import { serverError } from "@/lib/api-errors";
 
 const bodySchema = z.object({
   styleInput: z.string().min(1).max(200),
@@ -32,11 +33,14 @@ export async function POST(req: NextRequest) {
       messages: [{ role: "user", content: buildStyleCardPrompt(parsed.data) }],
     });
   } catch (err: unknown) {
-    const e = err as { status?: number; message?: string };
-    return NextResponse.json(
-      { error: `Anthropic API error: ${e.message ?? "unknown"}` },
-      { status: e.status ?? 500 },
-    );
+    const e = err as { status?: number };
+    // Preserve upstream 4xx (rate limit, etc.) so the client can react; 5xx becomes a generic
+    // "try again" via serverError.
+    const status = e.status ?? 500;
+    if (status >= 400 && status < 500) {
+      return NextResponse.json({ error: "Style generation failed. Please try again." }, { status });
+    }
+    return serverError(err, { route: "POST /api/style/card", userId: user.id });
   }
   await recordProviderUsage({
     userId: user.id,

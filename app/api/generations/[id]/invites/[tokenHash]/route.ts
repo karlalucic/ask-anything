@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { serverError } from "@/lib/api-errors";
 
 export async function DELETE(
   req: NextRequest,
@@ -27,6 +28,6 @@ export async function DELETE(
     .eq("created_by", user.id)
     .is("revoked_at", null);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error, { route: "DELETE /api/generations/[id]/invites/[tokenHash]", userId: user.id });
   return NextResponse.json({ ok: true });
 }

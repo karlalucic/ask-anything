@@ -14,7 +14,6 @@ export class AppError extends Error {
     return {
       ...this.info,
       message: this.message,
-      stack: this.stack,
     };
   }
 }
