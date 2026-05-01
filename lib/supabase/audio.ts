@@ -1,6 +1,10 @@
 import { createSupabaseServiceClient } from "./server";
 
-const AUDIO_SIGNED_URL_TTL_SECONDS = 6 * 60 * 60;
+// Generations are capped at 60 minutes; 90 bounds a worst-case listening
+// session with seek/scrub headroom. Signed URLs are unrescindable once minted,
+// so this caps the residual access window after a revoke. We re-mint on every
+// page render, so most listeners never come close to the ceiling.
+const AUDIO_SIGNED_URL_TTL_SECONDS = 90 * 60;
 
 export async function createAudioSignedUrl(
   audioPath: string,
