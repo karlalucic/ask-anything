@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 import { isAdminUser } from "@/lib/admin";
+import { serverError } from "@/lib/api-errors";
+
+const querySchema = z.object({
+  format: z.enum(["json", "csv"]).default("json"),
+  limit: z.coerce.number().int().min(1).max(1000).default(500),
+});
 
 function csvCell(value: unknown): string {
   const raw = value == null ? "" : String(value);
@@ -15,9 +22,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { searchParams } = new URL(req.url);
-  const format = searchParams.get("format") ?? "json";
-  const limit = Math.min(parseInt(searchParams.get("limit") ?? "500"), 1000);
+  const parsed = querySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid query params" }, { status: 400 });
+  const { format, limit } = parsed.data;
 
   const serviceClient = createSupabaseServiceClient();
   const { data, error } = await serviceClient
@@ -26,7 +33,7 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error, { route: "GET /api/admin/feedback", userId: user?.id });
 
   if (format === "csv") {
     const header = "id,generation_id,user_id,rating,note,created_at,topic,duration,voice\n";

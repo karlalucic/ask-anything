@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
 import { captureServerEvent } from "@/lib/posthog-server";
+import { serverError } from "@/lib/api-errors";
+
+const patchSchema = z.object({ title: z.string().min(1).max(200) });
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -27,16 +31,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { title } = await req.json();
-  if (!title || typeof title !== "string") return NextResponse.json({ error: "title is required" }, { status: 400 });
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  const parsed = patchSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "title is required" }, { status: 400 });
 
   const { error } = await supabase
     .from("generations")
-    .update({ title })
+    .update({ title: parsed.data.title })
     .eq("id", id)
     .eq("user_id", user.id);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error, { route: "PATCH /api/generations/[id]", userId: user.id });
   return NextResponse.json({ ok: true });
 }
 
@@ -60,7 +70,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 
   const { error } = await supabase.from("generations").delete().eq("id", id).eq("user_id", user.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error, { route: "DELETE /api/generations/[id]", userId: user.id });
 
   captureServerEvent({
     distinctId: user.id,
