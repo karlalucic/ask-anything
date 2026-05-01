@@ -410,10 +410,26 @@ export const generateAudiobook = task({
       const outPath = path.join(tmpDir, "out.mp3");
 
       try {
-        await execa("ffmpeg", ["-f", "concat", "-safe", "0", "-i", concatListPath, "-c", "copy", outPath], {
-          cwd: tmpDir,
-          stdio: "pipe",
-        });
+        // Re-encode through libmp3lame instead of -c copy. With per-chapter
+        // chunks (~6 boundaries on a 20-min generation) and xAI returning
+        // chunks whose MP3 frames don't always line up byte-for-byte,
+        // stream-copy concat produces corrupted frames at the joins:
+        // mid-word cuts, dropouts, "stops randomly" on playback. Re-encoding
+        // normalizes the entire output stream and adds 5-10s of CPU on
+        // stitch — small price for clean audio.
+        await execa(
+          "ffmpeg",
+          [
+            "-f", "concat",
+            "-safe", "0",
+            "-i", concatListPath,
+            "-c:a", "libmp3lame",
+            "-b:a", "128k",
+            "-ar", "24000",
+            outPath,
+          ],
+          { cwd: tmpDir, stdio: "pipe" },
+        );
       } catch (err: unknown) {
         const e = err as { stderr?: string };
         throw new AppError({ stage: "stitch", provider: "ffmpeg", code: "concat_failed", upstreamBody: truncateForStorage(e.stderr), attempt: 1, generationId, retriable: true }, `ffmpeg concat failed: ${e.stderr}`, err as Error);
