@@ -19,10 +19,10 @@ import { getDurationWords } from "../lib/types";
 
 const MAX_CHUNK_CHARS = 12000;
 const AGGREGATION_MAX_OUTPUT_TOKENS = 8000;
-// LOCAL A/B TEST: setting this to 0 disables the Haiku polishing pass for
-// every generation. Drafts go straight to TTS via local concat. Revert to
-// 5000 if chapter transitions sound rough on listen-back.
-const MODEL_AGGREGATION_WORD_LIMIT = 0;
+// Below this many target words, ask Haiku to polish into one continuous script.
+// Above it, drafts are concatenated locally; chapter-level continuity prompts
+// already produce smooth seams without a model pass.
+const MODEL_AGGREGATION_WORD_LIMIT = 5000;
 const OUTLINE_MODEL = "claude-haiku-4-5-20251001";
 const OUTLINE_MAX_TOKENS = 4096;
 const AGGREGATION_MODEL = "claude-haiku-4-5-20251001";
