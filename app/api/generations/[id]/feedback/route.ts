@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { serverError } from "@/lib/api-errors";
+import { hashShareToken } from "@/lib/sharing";
 
 const bodySchema = z.object({
   rating: z.union([z.literal(-1), z.literal(1)]),
@@ -17,7 +18,7 @@ async function hasValidShareToken(generationId: string, token: string | undefine
   const { data: link } = await serviceClient
     .from("share_links")
     .select("generation_id, generations!inner(status, visibility)")
-    .eq("token", token)
+    .eq("token_hash", hashShareToken(token))
     .eq("generation_id", generationId)
     .is("revoked_at", null)
     .eq("generations.status", "complete")

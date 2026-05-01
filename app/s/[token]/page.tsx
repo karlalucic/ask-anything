@@ -11,6 +11,7 @@ import { SiteNav } from "@/components/site-nav";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
 import { captureServerEvent } from "@/lib/posthog-server";
 import { createAudioSignedUrl } from "@/lib/supabase/audio";
+import { hashShareToken } from "@/lib/sharing";
 
 export const metadata: Metadata = {
   title: "Shared podcast",
@@ -28,7 +29,7 @@ export default async function SharedListenPage({ params }: { params: Promise<{ t
   const { data: link } = await supabase
     .from("share_links")
     .select("generation_id")
-    .eq("token", token)
+    .eq("token_hash", hashShareToken(token))
     .is("revoked_at", null)
     .single();
 
