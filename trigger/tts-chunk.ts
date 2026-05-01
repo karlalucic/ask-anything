@@ -9,7 +9,13 @@ const MIN_CHUNK_BYTES = 1024;
 
 export const ttsChunk = task({
   id: "tts-chunk",
-  queue: { name: "tts-chunk", concurrencyLimit: 3 },
+  // Bumped from 3 to 6: lets long-form generations run all their chunks
+  // simultaneously instead of in 2-3 sequential batches. Each request is the
+  // same size as before, so we're not changing per-request behavior; just
+  // letting xAI's queue see them all at once. The task already retries 429s
+  // (status >= 500 || status === 429 → retriable) so a brief rate-limit blip
+  // won't fail the run.
+  queue: { name: "tts-chunk", concurrencyLimit: 6 },
   maxDuration: 300,
   run: async (payload: {
     generationId: string;
@@ -59,7 +65,10 @@ export const ttsChunk = task({
         body: JSON.stringify({
           text,
           voice_id: voice.charAt(0).toUpperCase() + voice.slice(1), // "eve" → "Eve"
-          output_format: { codec: "mp3", sample_rate: 44100, bit_rate: 128000 },
+          // 24 kHz is xAI's documented default (TTS-guide.md, section 7) and
+          // the speech-optimized path; 44.1 kHz was burning extra synthesis
+          // time for sample resolution that's audibly identical on narration.
+          output_format: { codec: "mp3", sample_rate: 24000, bit_rate: 128000 },
           language: "en",
         }),
         signal: AbortSignal.timeout(240_000),
@@ -107,7 +116,7 @@ export const ttsChunk = task({
       );
     }
 
-    // Record usage IMMEDIATELY — xAI has charged us for the synthesis even if
+    // Record usage IMMEDIATELY: xAI has charged us for the synthesis even if
     // the audio is undersized or upload fails downstream.
     await recordProviderUsage({
       generationId,

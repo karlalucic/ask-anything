@@ -12,7 +12,11 @@ const MAX_ITERATIONS = 3;
 
 export const chapterResearch = task({
   id: "chapter-research",
-  queue: { name: "chapter-research", concurrencyLimit: 2 },
+  // Bumped from 2 to 6 so a typical 6-chapter generation researches every
+  // chapter at once instead of in 3 sequential batches. Anthropic rate limit
+  // risk is real but small at this scale; the task already retries on
+  // transient failures so a brief 429 doesn't fail the run.
+  queue: { name: "chapter-research", concurrencyLimit: 6 },
   maxDuration: 600,
   run: async (payload: {
     generationId: string;
@@ -47,7 +51,19 @@ export const chapterResearch = task({
     const messages: Anthropic.MessageParam[] = [
       { role: "user", content: buildResearchUserPrompt(chapter, sourcesConfig) },
     ];
-    const tools = buildResearchTools(sourcesConfig) as Anthropic.Tool[];
+
+    // System prompt and tools are identical across every chapter in a
+    // generation. Mark the last tool with cache_control so the entire
+    // (system + tools) prefix becomes a cache breakpoint. The second and
+    // third tool-loop iterations within a chapter read it back at the
+    // cached-input rate.
+    const baseTools = buildResearchTools(sourcesConfig) as Anthropic.Tool[];
+    const tools: Anthropic.Tool[] = baseTools.map((tool, idx) =>
+      idx === baseTools.length - 1
+        ? ({ ...tool, cache_control: { type: "ephemeral" } } as Anthropic.Tool)
+        : tool,
+    );
+    const systemPrompt = buildResearchSystemPrompt(sourcesConfig);
 
     let research: ChapterResearch | null = null;
     const startTime = Date.now();
@@ -69,7 +85,7 @@ export const chapterResearch = task({
         response = await anthropic.messages.create({
           model: "claude-sonnet-4-6",
           max_tokens: 4096,
-          system: buildResearchSystemPrompt(sourcesConfig),
+          system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
           messages,
           tools,
         });
@@ -104,7 +120,7 @@ export const chapterResearch = task({
       const toolUseCount = response.content.filter((b) => b.type === "tool_use").length;
       const webSearchRequests = response.usage.server_tool_use?.web_search_requests ?? 0;
 
-      // Record usage FIRST — provider has charged us; row must exist even if logRunEvent
+      // Record usage FIRST: provider has charged us; row must exist even if logRunEvent
       // (or anything downstream) fails.
       await recordProviderUsage({
         generationId,

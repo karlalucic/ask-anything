@@ -10,7 +10,9 @@ import type { ChapterPlan, ChapterResearch, StyleCard } from "../lib/types";
 
 export const chapterDraft = task({
   id: "chapter-draft",
-  queue: { name: "chapter-draft", concurrencyLimit: 2 },
+  // Bumped from 2 to 6 to match chapter-research. Lets all chapters draft in
+  // parallel instead of in 3 sequential batches.
+  queue: { name: "chapter-draft", concurrencyLimit: 6 },
   maxDuration: 600,
   run: async (payload: {
     generationId: string;
@@ -20,8 +22,10 @@ export const chapterDraft = task({
     research: ChapterResearch;
     styleCard: StyleCard;
     totalChapters: number;
+    prevChapter?: { title: string; thesis: string } | null;
+    nextChapter?: { title: string; thesis: string } | null;
   }) => {
-    const { generationId, userId, chapterIdx, chapter, styleCard, totalChapters } = payload;
+    const { generationId, userId, chapterIdx, chapter, styleCard, totalChapters, prevChapter, nextChapter } = payload;
     const research = normalizeChapterResearch(payload.research);
 
     const supabase = createClient(
@@ -57,24 +61,27 @@ export const chapterDraft = task({
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     let response: Anthropic.Message;
 
+    const { system, user } = buildDraftPrompt({
+      chapter,
+      research,
+      styleCard,
+      chapterNumber: chapterIdx + 1,
+      totalChapters,
+      isFirst: chapterIdx === 0,
+      isLast: chapterIdx === totalChapters - 1,
+      prevChapter,
+      nextChapter,
+    });
+
     try {
       response = await anthropic.messages.create({
         model: "claude-opus-4-7",
         max_tokens: 8192,
-        messages: [
-          {
-            role: "user",
-            content: buildDraftPrompt({
-              chapter,
-              research,
-              styleCard,
-              chapterNumber: chapterIdx + 1,
-              totalChapters,
-              isFirst: chapterIdx === 0,
-              isLast: chapterIdx === totalChapters - 1,
-            }),
-          },
-        ],
+        // Style card + instructions are identical for every chapter in this
+        // generation, so cache the system prefix and chapters 2..N read it back
+        // at the cached-input rate.
+        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: user }],
       });
     } catch (err: unknown) {
       const errObj = err as { status?: number; message?: string };
@@ -104,7 +111,7 @@ export const chapterDraft = task({
       );
     }
 
-    // Record usage IMMEDIATELY — before any throwing logic (max_tokens check, downstream upload).
+    // Record usage IMMEDIATELY: before any throwing logic (max_tokens check, downstream upload).
     await recordProviderUsage({
       generationId,
       userId,
@@ -130,7 +137,7 @@ export const chapterDraft = task({
           chapterIdx,
           retriable: true,
         },
-        "Draft response truncated by max_tokens — consider reducing targetWords",
+        "Draft response truncated by max_tokens; consider reducing targetWords",
       );
     }
 
