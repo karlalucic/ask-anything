@@ -12,6 +12,7 @@ import { ScriptDownloadButton } from "@/components/script-download-button";
 import { SiteNav } from "@/components/site-nav";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
 import { createAudioSignedUrl } from "@/lib/supabase/audio";
+import { buildChapterMarks } from "@/lib/chapter-marks";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
@@ -120,7 +121,11 @@ export default async function ListenPage({ params }: { params: Promise<{ id: str
 
         {audioUrl ? (
           <div className="mb-10">
-            <AudioPlayer src={audioUrl} durationSeconds={generation.audioDurationSeconds} />
+            <AudioPlayer
+              src={audioUrl}
+              durationSeconds={generation.audioDurationSeconds}
+              chapters={buildChapterMarks(chapters, generation.audioDurationSeconds)}
+            />
           </div>
         ) : (
           <div className="mb-10">
@@ -138,20 +143,6 @@ export default async function ListenPage({ params }: { params: Promise<{ id: str
               <Button variant="ghost" size="sm" type="submit">Dismiss</Button>
             </form>
             <ResumeButton generationId={id} />
-          </div>
-        )}
-
-        {generation.status === "complete" && chapters.length > 0 && (
-          <div className="border-t border-white/10 pt-8 mt-8">
-            <h2 className="text-sm font-medium text-white/50 mb-4">Chapters</h2>
-            <ol className="space-y-2">
-              {chapters.map((c) => (
-                <li key={c.idx} className="flex gap-3 text-sm text-white/60">
-                  <span className="text-white/20 tabular-nums w-4 shrink-0">{c.idx + 1}</span>
-                  <span>{c.title}</span>
-                </li>
-              ))}
-            </ol>
           </div>
         )}
 

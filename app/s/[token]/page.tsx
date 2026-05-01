@@ -12,6 +12,7 @@ import { toGenerationWithChapters } from "@/lib/supabase/mappers";
 import { captureServerEvent } from "@/lib/posthog-server";
 import { createAudioSignedUrl } from "@/lib/supabase/audio";
 import { hashShareToken } from "@/lib/sharing";
+import { buildChapterMarks } from "@/lib/chapter-marks";
 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
   const { token } = await params;
@@ -103,7 +104,11 @@ export default async function SharedListenPage({ params }: { params: Promise<{ t
         </div>
 
         <div className="mb-10">
-          <AudioPlayer src={audioUrl} durationSeconds={generation.audioDurationSeconds} />
+          <AudioPlayer
+            src={audioUrl}
+            durationSeconds={generation.audioDurationSeconds}
+            chapters={buildChapterMarks(generation.chapters ?? [], generation.audioDurationSeconds)}
+          />
         </div>
 
         <div className="mb-10 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
@@ -115,20 +120,6 @@ export default async function SharedListenPage({ params }: { params: Promise<{ t
             )}
           </div>
         </div>
-
-        {generation.chapters && generation.chapters.length > 0 && (
-          <div className="border-t border-white/10 pt-8 mt-8">
-            <h2 className="text-sm font-medium text-white/50 mb-4">Chapters</h2>
-            <ol className="space-y-2">
-              {generation.chapters.map((c) => (
-                <li key={c.idx} className="flex gap-3 text-sm text-white/60">
-                  <span className="text-white/20 tabular-nums w-4 shrink-0">{c.idx + 1}</span>
-                  <span>{c.title}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-        )}
 
         {generation.fullScript && (
           <ScriptDisplay script={generation.fullScript} title={generation.title ?? generation.topic} />
