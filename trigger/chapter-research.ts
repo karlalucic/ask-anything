@@ -47,7 +47,19 @@ export const chapterResearch = task({
     const messages: Anthropic.MessageParam[] = [
       { role: "user", content: buildResearchUserPrompt(chapter, sourcesConfig) },
     ];
-    const tools = buildResearchTools(sourcesConfig) as Anthropic.Tool[];
+
+    // System prompt and tools are identical across every chapter in a
+    // generation. Mark the last tool with cache_control so the entire
+    // (system + tools) prefix becomes a cache breakpoint — the second and
+    // third tool-loop iterations within a chapter read it back at the
+    // cached-input rate.
+    const baseTools = buildResearchTools(sourcesConfig) as Anthropic.Tool[];
+    const tools: Anthropic.Tool[] = baseTools.map((tool, idx) =>
+      idx === baseTools.length - 1
+        ? ({ ...tool, cache_control: { type: "ephemeral" } } as Anthropic.Tool)
+        : tool,
+    );
+    const systemPrompt = buildResearchSystemPrompt(sourcesConfig);
 
     let research: ChapterResearch | null = null;
     const startTime = Date.now();
@@ -69,7 +81,7 @@ export const chapterResearch = task({
         response = await anthropic.messages.create({
           model: "claude-sonnet-4-6",
           max_tokens: 4096,
-          system: buildResearchSystemPrompt(sourcesConfig),
+          system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
           messages,
           tools,
         });
