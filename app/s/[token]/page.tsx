@@ -1,7 +1,7 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
 import type { Metadata } from "next";
-import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 import { AudioPlayer } from "@/components/audio-player";
 import { DownloadButton } from "@/components/download-button";
 import { FeedbackButtons } from "@/components/feedback-buttons";
@@ -13,17 +13,48 @@ import { captureServerEvent } from "@/lib/posthog-server";
 import { createAudioSignedUrl } from "@/lib/supabase/audio";
 import { hashShareToken } from "@/lib/sharing";
 
-export const metadata: Metadata = {
-  title: "Shared podcast",
-  robots: {
-    index: false,
-    follow: false,
-  },
-};
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  const { token } = await params;
+  const supabase = createSupabaseServiceClient();
+  const { data: link } = await supabase
+    .from("share_links")
+    .select("generation_id")
+    .eq("token_hash", hashShareToken(token))
+    .is("revoked_at", null)
+    .maybeSingle();
+
+  if (!link) return { title: "Shared podcast", robots: { index: false, follow: false } };
+
+  const { data: gen } = await supabase
+    .from("generations")
+    .select("title, topic, duration")
+    .eq("id", link.generation_id)
+    .eq("status", "complete")
+    .eq("visibility", "public")
+    .maybeSingle();
+
+  const title = gen?.title ?? gen?.topic ?? "Shared podcast";
+  const description = gen?.duration ? `A ${gen.duration}-minute podcast on ${gen.topic}.` : "A shared AI-generated podcast.";
+
+  return {
+    title,
+    description,
+    robots: { index: false, follow: false },
+    openGraph: { title, description, type: "music.song" },
+    twitter: { card: "summary", title, description },
+  };
+}
 
 export default async function SharedListenPage({ params }: { params: Promise<{ token: string }> }) {
   await connection();
   const { token } = await params;
+
+  // Public sharing now requires an account; bounce anon listeners through
+  // login and back. /login is allowed by getSafeRedirectPath for /s/* paths.
+  const userClient = await createSupabaseServerClient();
+  const { data: { user } } = await userClient.auth.getUser();
+  if (!user) redirect(`/login?next=/s/${encodeURIComponent(token)}`);
+
   const supabase = createSupabaseServiceClient();
 
   const { data: link } = await supabase
