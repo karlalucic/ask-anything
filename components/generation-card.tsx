@@ -11,6 +11,7 @@ const STATUS_LABEL: Record<GenerationStatus, string> = {
   synthesizing: "narrating",
   complete: "complete",
   failed: "failed",
+  canceling: "canceling",
   canceled: "canceled",
 };
 
@@ -23,6 +24,7 @@ const STATUS_VARIANT: Record<GenerationStatus, "default" | "secondary" | "destru
   synthesizing: "secondary",
   complete: "default",
   failed: "destructive",
+  canceling: "outline",
   canceled: "outline",
 };
 
