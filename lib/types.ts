@@ -60,7 +60,7 @@ export interface StageProgress {
 }
 
 export interface AppErrorInfo {
-  stage: "outline" | "research" | "draft" | "aggregate" | "tts" | "stitch" | "storage" | "style";
+  stage: "outline" | "research" | "draft" | "aggregate" | "tts" | "stitch" | "storage" | "style" | "unknown";
   provider: "anthropic" | "xai" | "ffmpeg" | "supabase" | "internal";
   code: string;
   message?: string;
