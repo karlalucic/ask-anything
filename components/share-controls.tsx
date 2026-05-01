@@ -258,7 +258,9 @@ export function ShareControls({
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" type="button" onClick={createOrCopyPublicLink} disabled={loading}>
                     <Copy aria-hidden />
-                    {visibility === "public" ? "Copy link" : "Create link"}
+                    {visibility === "public"
+                      ? (publicLinkUrl ? "New link" : "Reveal new link")
+                      : "Create link"}
                   </Button>
                   {visibility === "public" && (
                     <Button size="sm" variant="ghost" type="button" onClick={disablePublicLink} disabled={loading}>
@@ -267,6 +269,11 @@ export function ShareControls({
                     </Button>
                   )}
                 </div>
+                {visibility === "public" && !publicLinkUrl && (
+                  <p className="mt-2 text-xs text-white/40">
+                    A public link is active. Generating a new one will revoke the previous URL.
+                  </p>
+                )}
                 {publicLinkUrl && visibility === "public" && (
                   <CopyableUrl key={publicLinkUrl} url={publicLinkUrl} initiallyCopied={publicLinkJustCopied} />
                 )}

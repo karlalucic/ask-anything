@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { captureServerEvent } from "@/lib/posthog-server";
-import { generateShareToken } from "@/lib/sharing";
+import { generateShareToken, hashShareToken } from "@/lib/sharing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { serverError } from "@/lib/api-errors";
 
@@ -22,29 +22,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Generation not yet complete" }, { status: 400 });
   }
 
-  const { data: existing } = await supabase
+  // Token is hashed at rest, so we can't return a previously-issued one. Treat
+  // every POST as "rotate": revoke any active link, mint a new one. The unique
+  // index on (generation_id) where revoked_at is null forces this anyway.
+  await supabase
     .from("share_links")
-    .select("token")
+    .update({ revoked_at: new Date().toISOString() })
     .eq("generation_id", id)
-    .is("revoked_at", null)
-    .maybeSingle();
-
-  if (existing) {
-    await supabase
-      .from("generations")
-      .update({ visibility: "public" })
-      .eq("id", id)
-      .eq("user_id", user.id);
-
-    return NextResponse.json({ token: existing.token, visibility: "public" });
-  }
+    .is("revoked_at", null);
 
   let token = generateShareToken();
-  let insertError: { message?: string; code?: string } | null = null;
+  let insertError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     token = generateShareToken();
     const { error } = await supabase.from("share_links").insert({
-      token,
+      token_hash: hashShareToken(token),
       generation_id: id,
       created_by: user.id,
     });
