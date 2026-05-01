@@ -57,24 +57,25 @@ export const chapterDraft = task({
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     let response: Anthropic.Message;
 
+    const { system, user } = buildDraftPrompt({
+      chapter,
+      research,
+      styleCard,
+      chapterNumber: chapterIdx + 1,
+      totalChapters,
+      isFirst: chapterIdx === 0,
+      isLast: chapterIdx === totalChapters - 1,
+    });
+
     try {
       response = await anthropic.messages.create({
         model: "claude-opus-4-7",
         max_tokens: 8192,
-        messages: [
-          {
-            role: "user",
-            content: buildDraftPrompt({
-              chapter,
-              research,
-              styleCard,
-              chapterNumber: chapterIdx + 1,
-              totalChapters,
-              isFirst: chapterIdx === 0,
-              isLast: chapterIdx === totalChapters - 1,
-            }),
-          },
-        ],
+        // Style card + instructions are identical for every chapter in this
+        // generation — cache the system prefix so chapters 2..N read it back
+        // at the cached-input rate.
+        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: user }],
       });
     } catch (err: unknown) {
       const errObj = err as { status?: number; message?: string };
