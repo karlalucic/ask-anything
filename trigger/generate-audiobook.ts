@@ -18,8 +18,14 @@ import type { ChapterPlan, StyleCard, FamiliarityLevel, IntentType, VoiceId, Sou
 import { getDurationWords } from "../lib/types";
 
 const MAX_CHUNK_CHARS = 12000;
-const AGGREGATION_MAX_OUTPUT_TOKENS = 16000;
-const MODEL_AGGREGATION_WORD_LIMIT = 10000;
+const AGGREGATION_MAX_OUTPUT_TOKENS = 8000;
+// Below this many target words, ask Haiku to polish into one continuous script.
+// Above it, drafts are concatenated locally; chapter-level continuity prompts
+// already produce smooth seams without a model pass.
+const MODEL_AGGREGATION_WORD_LIMIT = 5000;
+const OUTLINE_MODEL = "claude-haiku-4-5-20251001";
+const OUTLINE_MAX_TOKENS = 4096;
+const AGGREGATION_MODEL = "claude-haiku-4-5-20251001";
 
 interface GeneratePayload {
   generationId: string;
@@ -119,13 +125,13 @@ export const generateAudiobook = task({
         const outlinePrompt = buildOutlinePrompt({ topic, duration, familiarity, intent, styleCard });
 
         const outlineStart = Date.now();
-        await logRunEvent({ generationId, stage: "outline", provider: "anthropic", kind: "call", attempt: 1, payload: { model: "claude-sonnet-4-6" } });
+        await logRunEvent({ generationId, stage: "outline", provider: "anthropic", kind: "call", attempt: 1, payload: { model: OUTLINE_MODEL } });
 
         let outlineResponse: Anthropic.Message;
         try {
           outlineResponse = await anthropic.messages.stream({
-            model: "claude-sonnet-4-6",
-            max_tokens: 16000,
+            model: OUTLINE_MODEL,
+            max_tokens: OUTLINE_MAX_TOKENS,
             messages: [{ role: "user", content: outlinePrompt }],
           }).finalMessage();
         } catch (err: unknown) {
@@ -133,14 +139,14 @@ export const generateAudiobook = task({
           throw new AppError({ stage: "outline", provider: "anthropic", code: "api_error", upstreamStatus: e.status, attempt: 1, generationId, retriable: true }, `Outline failed: ${e.message}`, err as Error);
         }
 
-        // Record usage IMMEDIATELY — provider has already charged; row must exist
+        // Record usage IMMEDIATELY. Provider has already charged; row must exist
         // even if downstream parse/upload throws.
         await recordProviderUsage({
           generationId,
           userId,
           stage: "outline",
           provider: "anthropic",
-          model: "claude-sonnet-4-6",
+          model: OUTLINE_MODEL,
           inputTokens: outlineResponse.usage.input_tokens,
           outputTokens: outlineResponse.usage.output_tokens,
           cachedInputTokens: outlineResponse.usage.cache_read_input_tokens ?? 0,
@@ -157,7 +163,7 @@ export const generateAudiobook = task({
           throw new AppError({ stage: "outline", provider: "anthropic", code: "schema_mismatch", attempt: 1, generationId, retriable: false }, "Failed to parse outline JSON", err as Error);
         }
 
-        await logRunEvent({ generationId, stage: "outline", provider: "anthropic", kind: "call", attempt: 1, durationMs: Date.now() - outlineStart, response: { chapterCount: chapters.length } });
+        await logRunEvent({ generationId, stage: "outline", provider: "anthropic", kind: "call", attempt: 1, durationMs: Date.now() - outlineStart, response: { chapterCount: chapters.length, model: OUTLINE_MODEL } });
         await supabase.from("generations").update({ outline: chapters }).eq("id", generationId);
       } else {
         await logRunEvent({ generationId, stage: "outline", provider: "internal", kind: "info", response: { reusedChapterCount: chapters.length } });
@@ -271,7 +277,7 @@ export const generateAudiobook = task({
           let aggResponse: Anthropic.Message;
           try {
             aggResponse = await anthropic.messages.stream({
-              model: "claude-sonnet-4-6",
+              model: AGGREGATION_MODEL,
               max_tokens: AGGREGATION_MAX_OUTPUT_TOKENS,
               messages: [{ role: "user", content: aggregatePrompt }],
             }).finalMessage();
@@ -285,7 +291,7 @@ export const generateAudiobook = task({
             userId,
             stage: "aggregate",
             provider: "anthropic",
-            model: "claude-sonnet-4-6",
+            model: AGGREGATION_MODEL,
             inputTokens: aggResponse.usage.input_tokens,
             outputTokens: aggResponse.usage.output_tokens,
             cachedInputTokens: aggResponse.usage.cache_read_input_tokens ?? 0,
