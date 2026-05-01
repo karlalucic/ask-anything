@@ -6,16 +6,12 @@ interface AggregateBuild {
 }
 
 /**
- * Build a focused aggregation prompt that asks the model to polish chapter
- * drafts cross-chapter (dedup + bridging + word-count) while preserving
- * individual draft wording wherever possible. Output is structured per
- * chapter so the orchestrator can keep per-chapter audio chunking after
- * aggregation, instead of falling back to monolithic chunking on a single
- * polished string.
- *
- * Per-chapter output also makes the seams the model produces (any added
- * bridge sentences) attach naturally to the chapter that owns them, rather
- * than living somewhere in a re-flowed continuous string.
+ * Sonnet-driven aggregation that polishes chapter drafts into a coherent
+ * audio briefing and returns the result as per-chapter JSON. The output
+ * shape preserves chapter boundaries so the orchestrator can keep per-
+ * chapter TTS chunking after aggregation runs, while the prompt itself
+ * gives Sonnet full latitude to rewrite, dedup, and tighten the prose
+ * (rather than just touching the seams).
  */
 export function buildAggregatePrompt(params: {
   chapters: { title: string; draft: string }[];
@@ -27,21 +23,25 @@ export function buildAggregatePrompt(params: {
   const minTarget = Math.floor(targetTotalWords * 0.97);
   const maxTarget = Math.ceil(targetTotalWords * 1.03);
 
-  // Stable across one generation (cacheable).
-  const system = `You are the final editor of an audio briefing script. Each chapter was drafted independently, so chapters cannot reference each other directly and may overlap on facts or examples. Your job is the cross-chapter polish those isolated drafts cannot do for themselves.
+  // Stable across one generation; cache eligible.
+  const system = `You are the final editor of an audio briefing script. Each chapter was drafted independently, so chapters haven't seen each other and your job is to make them feel like one coherent piece for a listener.
 
-Do exactly three things:
-1. CROSS-CHAPTER DEDUP. If two chapters cite the same statistic, anecdote, or example, keep it in the chapter where it lands strongest and tighten the duplicate to a brief reference (or delete it).
-2. BRIDGING. Where one chapter ends and the next begins, add a single sentence (or extend the existing one) that connects the ideas. Place this sentence at the START of the receiving chapter, not at the end of the previous one. Avoid filler like "Now let's talk about" — write the bridge in the same voice as the surrounding prose.
-3. WORD COUNT. Trim or expand only as needed to land inside the target range.
+YOUR TASKS:
+1. Smooth chapter transitions, adding bridging sentences at the start of each receiving chapter (chapters 2 onward) so the listener never feels a hard break.
+2. Enforce consistent sentence rhythm throughout. The drafts may drift; pull them back to the style card's rhythm.
+3. Ensure signature moves appear throughout, not bunched in the early chapters.
+4. Trim or expand to land inside the target word count range.
+5. Check for repetition across chapters (the same statistic, anecdote, or example showing up twice). Keep it where it lands strongest, tighten the duplicate to a brief reference or remove it.
+6. Ensure the opening hook and closing line are strong per the style card.
 
-Preserve the drafts verbatim everywhere else. Do NOT rewrite paragraphs that already work. Do NOT rephrase for variety. Do NOT change individual word choices unless they are genuinely repeating across chapters. The drafts already match the style card; your job is the seams, not the prose.
+You have full latitude to rewrite sentences for clarity, momentum, and rhythm. The drafts are raw material; your output is the broadcast.
 
-STYLE CARD (the drafts already follow this — don't reapply it):
+STYLE CARD:
 - Opening pattern: ${styleCard.openingPattern}
 - Chapter shape: ${styleCard.chapterShape}
 - Sentence rhythm: ${styleCard.sentenceRhythm}
 - Signature moves: ${styleCard.signatureMoves.join("; ")}
+- Target word count range: ${styleCard.targetWordCountRange[0]}-${styleCard.targetWordCountRange[1]}
 
 OUTPUT FORMAT: Return a JSON object only, no prose, no markdown fences:
 
@@ -52,7 +52,7 @@ OUTPUT FORMAT: Return a JSON object only, no prose, no markdown fences:
   ]
 }
 
-Each "polished" string is the complete chapter ready for narration: any bridging sentence at the start (for chapters after the first), then the chapter body mostly verbatim from the input. Do not include chapter titles or labels.`;
+Each "polished" string is the complete chapter ready for narration: any bridging sentence at the start (for chapters after the first), then the chapter body. Do not include chapter titles or labels. Do not abbreviate or use placeholders. Every chapter must contain its complete polished text.`;
 
   const draftsBlock = chapters
     .map((c, i) => `CHAPTER ${i}:\n${c.draft.trim()}`)

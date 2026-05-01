@@ -18,14 +18,14 @@ import type { ChapterPlan, StyleCard, FamiliarityLevel, IntentType, VoiceId, Sou
 import { getDurationWords } from "../lib/types";
 
 const MAX_CHUNK_CHARS = 12000;
-const AGGREGATION_MAX_OUTPUT_TOKENS = 8000;
-// Below this many target words, ask Haiku to polish into one continuous script.
+const AGGREGATION_MAX_OUTPUT_TOKENS = 16000;
+// Below this many target words, ask Sonnet to polish into per-chapter JSON.
 // Above it, drafts are concatenated locally; chapter-level continuity prompts
 // already produce smooth seams without a model pass.
 const MODEL_AGGREGATION_WORD_LIMIT = 5000;
 const OUTLINE_MODEL = "claude-haiku-4-5-20251001";
 const OUTLINE_MAX_TOKENS = 4096;
-const AGGREGATION_MODEL = "claude-haiku-4-5-20251001";
+const AGGREGATION_MODEL = "claude-sonnet-4-6";
 
 interface GeneratePayload {
   generationId: string;
@@ -279,13 +279,6 @@ export const generateAudiobook = task({
             targetTotalWords,
           });
 
-          // Tighten the output ceiling around the actual draft size so Haiku
-          // can't pad. ~1.5 tokens per word with 15% headroom for bridges.
-          const aggregateMaxTokens = Math.min(
-            AGGREGATION_MAX_OUTPUT_TOKENS,
-            Math.max(2048, Math.ceil(draftWords * 1.5 * 1.15)),
-          );
-
           const aggStart = Date.now();
           await logRunEvent({ generationId, stage: "aggregate", provider: "anthropic", kind: "call", attempt: 1 });
 
@@ -293,7 +286,7 @@ export const generateAudiobook = task({
           try {
             aggResponse = await anthropic.messages.stream({
               model: AGGREGATION_MODEL,
-              max_tokens: aggregateMaxTokens,
+              max_tokens: AGGREGATION_MAX_OUTPUT_TOKENS,
               system: [{ type: "text", text: aggregateSystem, cache_control: { type: "ephemeral" } }],
               messages: [{ role: "user", content: aggregateUser }],
             }).finalMessage();
