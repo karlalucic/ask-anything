@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { serverError } from "@/lib/api-errors";
 
 export async function POST() {
   const supabase = await createSupabaseServerClient();
@@ -11,6 +12,6 @@ export async function POST() {
     .update({ has_seen_intro: true })
     .eq("id", user.id);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error, { route: "POST /api/profile/seen-intro", userId: user.id });
   return new NextResponse(null, { status: 204 });
 }

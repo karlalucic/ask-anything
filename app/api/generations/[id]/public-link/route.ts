@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { captureServerEvent } from "@/lib/posthog-server";
 import { generateShareToken } from "@/lib/sharing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { serverError } from "@/lib/api-errors";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!error) break;
   }
 
-  if (insertError) return NextResponse.json({ error: insertError.message ?? "Failed to create link" }, { status: 500 });
+  if (insertError) return serverError(insertError, { route: "POST /api/generations/[id]/public-link (insert)", userId: user.id });
 
   const { error: visibilityError } = await supabase
     .from("generations")
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .eq("id", id)
     .eq("user_id", user.id);
 
-  if (visibilityError) return NextResponse.json({ error: visibilityError.message }, { status: 500 });
+  if (visibilityError) return serverError(visibilityError, { route: "POST /api/generations/[id]/public-link (visibility)", userId: user.id });
 
   captureServerEvent({
     distinctId: user.id,
@@ -97,7 +98,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     .eq("id", id)
     .eq("user_id", user.id);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error, { route: "DELETE /api/generations/[id]/public-link", userId: user.id });
 
   return NextResponse.json({ ok: true, visibility: "private" });
 }

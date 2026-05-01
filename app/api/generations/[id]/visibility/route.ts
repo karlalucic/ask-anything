@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { serverError } from "@/lib/api-errors";
 
 const bodySchema = z.object({
   visibility: z.enum(["private", "public"]),
@@ -33,7 +34,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .eq("id", id)
     .eq("user_id", user.id);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error, { route: "PATCH /api/generations/[id]/visibility", userId: user.id });
 
   if (parsed.data.visibility === "private") {
     await supabase

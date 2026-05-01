@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { serverError } from "@/lib/api-errors";
 
 const bodySchema = z.object({
   rating: z.union([z.literal(-1), z.literal(1)]),
@@ -64,6 +65,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     note: parsed.data.note ?? null,
   });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error, { route: "POST /api/generations/[id]/feedback", userId: user?.id });
   return NextResponse.json({ ok: true });
 }

@@ -5,6 +5,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { toGeneration } from "@/lib/supabase/mappers";
 import type { generateAudiobook } from "@/trigger/generate-audiobook";
 import { captureServerEvent } from "@/lib/posthog-server";
+import { serverError } from "@/lib/api-errors";
+
+const listQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+});
 
 const bodySchema = z.object({
   topic: z.string().min(1).max(1500),
@@ -107,9 +113,9 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { searchParams } = new URL(req.url);
-  const limit = Math.min(parseInt(searchParams.get("limit") ?? "20"), 50);
-  const offset = parseInt(searchParams.get("offset") ?? "0");
+  const parsed = listQuerySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid query params" }, { status: 400 });
+  const { limit, offset } = parsed.data;
 
   const { data, error } = await supabase
     .from("generations")
@@ -118,6 +124,6 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error, { route: "GET /api/generations", userId: user.id });
   return NextResponse.json({ generations: (data ?? []).map(toGeneration) });
 }
