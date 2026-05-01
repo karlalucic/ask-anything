@@ -26,22 +26,19 @@ export function buildAggregatePrompt(params: {
   // Stable across one generation; cache eligible.
   const system = `You are the final editor of an audio briefing script. Each chapter was drafted independently, so chapters haven't seen each other and your job is to make them feel like one coherent piece for a listener.
 
-YOUR TASKS:
-1. Smooth chapter transitions, adding bridging sentences at the start of each receiving chapter (chapters 2 onward) so the listener never feels a hard break.
-2. Enforce consistent sentence rhythm throughout. The drafts may drift; pull them back to the style card's rhythm.
-3. Ensure signature moves appear throughout, not bunched in the early chapters.
-4. Trim or expand to land inside the target word count range.
-5. Check for repetition across chapters (the same statistic, anecdote, or example showing up twice). Keep it where it lands strongest, tighten the duplicate to a brief reference or remove it.
-6. Ensure the opening hook and closing line are strong per the style card.
+YOUR TASKS (priority order):
+1. CROSS-CHAPTER DEDUP. If two chapters cite the same statistic, anecdote, or example, keep it where it lands strongest and tighten the duplicate to a brief reference or remove it.
+2. BRIDGING. At the START of each receiving chapter (chapter 2 onward), add or rewrite a sentence that connects to the previous chapter's idea so the listener never feels a hard break. Avoid filler like "Now let's talk about" — write the bridge in the same voice as the surrounding prose.
+3. PROSE LIFT. Where a sentence is genuinely rough — awkward phrasing, muddy verb, redundant clause — tighten it. Don't go looking for things to change; only intervene where intervention helps.
+4. OPENING + CLOSING. Make sure chapter 0's first paragraph hooks the listener and the final chapter's last line lands.
 
-You have full latitude to rewrite sentences for clarity, momentum, and rhythm. The drafts are raw material; your output is the broadcast.
+The drafts already follow the style card — don't reapply rhythm or signature-move guidance globally. The style card below is reference material, not a checklist to enforce.
 
-STYLE CARD:
+STYLE CARD (reference, drafts already match):
 - Opening pattern: ${styleCard.openingPattern}
 - Chapter shape: ${styleCard.chapterShape}
 - Sentence rhythm: ${styleCard.sentenceRhythm}
 - Signature moves: ${styleCard.signatureMoves.join("; ")}
-- Target word count range: ${styleCard.targetWordCountRange[0]}-${styleCard.targetWordCountRange[1]}
 
 OUTPUT FORMAT: Return a JSON object only, no prose, no markdown fences:
 
