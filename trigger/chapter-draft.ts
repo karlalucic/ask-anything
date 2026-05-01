@@ -22,8 +22,10 @@ export const chapterDraft = task({
     research: ChapterResearch;
     styleCard: StyleCard;
     totalChapters: number;
+    prevChapter?: { title: string; thesis: string } | null;
+    nextChapter?: { title: string; thesis: string } | null;
   }) => {
-    const { generationId, userId, chapterIdx, chapter, styleCard, totalChapters } = payload;
+    const { generationId, userId, chapterIdx, chapter, styleCard, totalChapters, prevChapter, nextChapter } = payload;
     const research = normalizeChapterResearch(payload.research);
 
     const supabase = createClient(
@@ -67,6 +69,8 @@ export const chapterDraft = task({
       totalChapters,
       isFirst: chapterIdx === 0,
       isLast: chapterIdx === totalChapters - 1,
+      prevChapter,
+      nextChapter,
     });
 
     try {
