@@ -7,6 +7,7 @@ export type GenerationStatus =
   | "synthesizing"
   | "complete"
   | "failed"
+  | "canceling"
   | "canceled";
 
 export type DurationPreset = number; // minutes (5–60)
