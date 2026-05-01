@@ -341,21 +341,22 @@ export const generateAudiobook = task({
       });
       await bumpProgress(generationId, "tts", { done: chunks.length, total: chunks.length });
 
-      // Download chunks and stitch with ffmpeg
+      // Download chunks and stitch with ffmpeg. These are plain Supabase
+      // storage HTTP calls (not Trigger.dev wait functions), so Promise.all
+      // is safe — saves several seconds for a typical 10-20 chunk run.
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `${generationId}-`));
 
-      const localPaths: string[] = [];
-      for (let i = 0; i < chunkPaths.length; i++) {
-        const { data, error } = await supabase.storage
-          .from("tts-chunks")
-          .download(chunkPaths[i]);
-        if (error || !data) {
-          throw new AppError({ stage: "stitch", provider: "supabase", code: "download_failed", attempt: 1, generationId, retriable: true }, `Failed to download chunk ${i}: ${error?.message}`);
-        }
-        const localPath = path.join(tmpDir, `${i}.mp3`);
-        fs.writeFileSync(localPath, Buffer.from(await data.arrayBuffer()));
-        localPaths.push(localPath);
-      }
+      const localPaths = await Promise.all(
+        chunkPaths.map(async (chunkPath, i) => {
+          const { data, error } = await supabase.storage.from("tts-chunks").download(chunkPath);
+          if (error || !data) {
+            throw new AppError({ stage: "stitch", provider: "supabase", code: "download_failed", attempt: 1, generationId, retriable: true }, `Failed to download chunk ${i}: ${error?.message}`);
+          }
+          const localPath = path.join(tmpDir, `${i}.mp3`);
+          fs.writeFileSync(localPath, Buffer.from(await data.arrayBuffer()));
+          return localPath;
+        }),
+      );
 
       const concatListPath = path.join(tmpDir, "list.txt");
       fs.writeFileSync(concatListPath, localPaths.map((p) => `file '${path.basename(p)}'`).join("\n"));
@@ -394,10 +395,11 @@ export const generateAudiobook = task({
         throw new AppError({ stage: "storage", provider: "supabase", code: "upload_failed", attempt: 1, generationId, retriable: true }, `Failed to upload final audio: ${audioUploadError.message}`);
       }
 
-      // Cleanup tmp and tts-chunks
+      // Cleanup tmp and tts-chunks. The remove() API accepts a list — one
+      // round trip beats N sequential ones.
       fs.rmSync(tmpDir, { recursive: true, force: true });
-      for (const p of chunkPaths) {
-        await supabase.storage.from("tts-chunks").remove([p]);
+      if (chunkPaths.length > 0) {
+        await supabase.storage.from("tts-chunks").remove(chunkPaths);
       }
 
       // Mark complete
