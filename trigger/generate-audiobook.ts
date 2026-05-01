@@ -7,7 +7,7 @@ import * as path from "path";
 import * as os from "os";
 import { PostHog } from "posthog-node";
 import { buildOutlinePrompt, parseOutlineResponse } from "../lib/prompts/outline";
-import { buildAggregatePrompt } from "../lib/prompts/aggregate";
+import { buildAggregatePrompt, parseAggregateResponse } from "../lib/prompts/aggregate";
 import { setGenerationStatus, bumpProgress, logRunEvent } from "../lib/supabase/progress";
 import { recordProviderUsage } from "../lib/usage/record";
 import { AppError, truncateForStorage } from "../lib/errors";
@@ -19,7 +19,13 @@ import { getDurationWords } from "../lib/types";
 
 const MAX_CHUNK_CHARS = 12000;
 const AGGREGATION_MAX_OUTPUT_TOKENS = 16000;
-const MODEL_AGGREGATION_WORD_LIMIT = 10000;
+// Below this many target words, ask Sonnet to polish into per-chapter JSON.
+// Above it, drafts are concatenated locally; chapter-level continuity prompts
+// already produce smooth seams without a model pass.
+const MODEL_AGGREGATION_WORD_LIMIT = 5000;
+const OUTLINE_MODEL = "claude-sonnet-4-6";
+const OUTLINE_MAX_TOKENS = 4096;
+const AGGREGATION_MODEL = "claude-sonnet-4-6";
 
 interface GeneratePayload {
   generationId: string;
@@ -119,13 +125,13 @@ export const generateAudiobook = task({
         const outlinePrompt = buildOutlinePrompt({ topic, duration, familiarity, intent, styleCard });
 
         const outlineStart = Date.now();
-        await logRunEvent({ generationId, stage: "outline", provider: "anthropic", kind: "call", attempt: 1, payload: { model: "claude-sonnet-4-6" } });
+        await logRunEvent({ generationId, stage: "outline", provider: "anthropic", kind: "call", attempt: 1, payload: { model: OUTLINE_MODEL } });
 
         let outlineResponse: Anthropic.Message;
         try {
           outlineResponse = await anthropic.messages.stream({
-            model: "claude-sonnet-4-6",
-            max_tokens: 16000,
+            model: OUTLINE_MODEL,
+            max_tokens: OUTLINE_MAX_TOKENS,
             messages: [{ role: "user", content: outlinePrompt }],
           }).finalMessage();
         } catch (err: unknown) {
@@ -133,14 +139,14 @@ export const generateAudiobook = task({
           throw new AppError({ stage: "outline", provider: "anthropic", code: "api_error", upstreamStatus: e.status, attempt: 1, generationId, retriable: true }, `Outline failed: ${e.message}`, err as Error);
         }
 
-        // Record usage IMMEDIATELY — provider has already charged; row must exist
+        // Record usage IMMEDIATELY. Provider has already charged; row must exist
         // even if downstream parse/upload throws.
         await recordProviderUsage({
           generationId,
           userId,
           stage: "outline",
           provider: "anthropic",
-          model: "claude-sonnet-4-6",
+          model: OUTLINE_MODEL,
           inputTokens: outlineResponse.usage.input_tokens,
           outputTokens: outlineResponse.usage.output_tokens,
           cachedInputTokens: outlineResponse.usage.cache_read_input_tokens ?? 0,
@@ -157,7 +163,7 @@ export const generateAudiobook = task({
           throw new AppError({ stage: "outline", provider: "anthropic", code: "schema_mismatch", attempt: 1, generationId, retriable: false }, "Failed to parse outline JSON", err as Error);
         }
 
-        await logRunEvent({ generationId, stage: "outline", provider: "anthropic", kind: "call", attempt: 1, durationMs: Date.now() - outlineStart, response: { chapterCount: chapters.length } });
+        await logRunEvent({ generationId, stage: "outline", provider: "anthropic", kind: "call", attempt: 1, durationMs: Date.now() - outlineStart, response: { chapterCount: chapters.length, model: OUTLINE_MODEL } });
         await supabase.from("generations").update({ outline: chapters }).eq("id", generationId);
       } else {
         await logRunEvent({ generationId, stage: "outline", provider: "internal", kind: "info", response: { reusedChapterCount: chapters.length } });
@@ -213,6 +219,8 @@ export const generateAudiobook = task({
             research: researchResults[i],
             styleCard,
             totalChapters: chapters.length,
+            prevChapter: i > 0 ? { title: chapters[i - 1].title, thesis: chapters[i - 1].thesis } : null,
+            nextChapter: i < chapters.length - 1 ? { title: chapters[i + 1].title, thesis: chapters[i + 1].thesis } : null,
           },
         })),
       );
@@ -229,6 +237,13 @@ export const generateAudiobook = task({
       await setGenerationStatus(generationId, "aggregating");
 
       let fullScript: string;
+      // When the audio was synthesized from per-chapter text (local concat or
+      // a fallback from aggregation), we keep that decomposition so the TTS
+      // stage can chunk along chapter boundaries instead of arbitrary 12k
+      // marks. When the polished aggregate script is used, the drafts are no
+      // longer a structural match for the audio, so we keep null and fall
+      // back to monolithic chunking.
+      let chapterTexts: string[] | null = null;
       if (existingGeneration?.full_script && isScriptLongEnough(existingGeneration.full_script, targetTotalWords)) {
         fullScript = existingGeneration.full_script;
         logger.info("Stage 4: Reusing cached full_script", { generationId, wordCount: countWords(fullScript) });
@@ -246,6 +261,7 @@ export const generateAudiobook = task({
 
         if (!shouldUseModelAggregation(targetTotalWords)) {
           fullScript = assembleScriptFromDrafts(drafts);
+          chapterTexts = drafts.map((d) => d.trim()).filter(Boolean);
           logger.info("Stage 4: Assembled long script locally", { generationId, wordCount: countWords(fullScript), targetTotalWords });
           await logRunEvent({
             generationId,
@@ -259,7 +275,7 @@ export const generateAudiobook = task({
           logger.info("Stage 4: Aggregating script", { generationId });
 
           const draftWords = drafts.reduce((sum, draft) => sum + countWords(draft), 0);
-          const aggregatePrompt = buildAggregatePrompt({
+          const { system: aggregateSystem, user: aggregateUser } = buildAggregatePrompt({
             chapters: chapters.map((c, i) => ({ title: c.title, draft: drafts[i] })),
             styleCard,
             targetTotalWords,
@@ -271,9 +287,10 @@ export const generateAudiobook = task({
           let aggResponse: Anthropic.Message;
           try {
             aggResponse = await anthropic.messages.stream({
-              model: "claude-sonnet-4-6",
+              model: AGGREGATION_MODEL,
               max_tokens: AGGREGATION_MAX_OUTPUT_TOKENS,
-              messages: [{ role: "user", content: aggregatePrompt }],
+              system: [{ type: "text", text: aggregateSystem, cache_control: { type: "ephemeral" } }],
+              messages: [{ role: "user", content: aggregateUser }],
             }).finalMessage();
           } catch (err: unknown) {
             const e = err as { status?: number; message?: string };
@@ -285,7 +302,7 @@ export const generateAudiobook = task({
             userId,
             stage: "aggregate",
             provider: "anthropic",
-            model: "claude-sonnet-4-6",
+            model: AGGREGATION_MODEL,
             inputTokens: aggResponse.usage.input_tokens,
             outputTokens: aggResponse.usage.output_tokens,
             cachedInputTokens: aggResponse.usage.cache_read_input_tokens ?? 0,
@@ -295,8 +312,19 @@ export const generateAudiobook = task({
           });
 
           const aggregateText = aggResponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
-          if (aggResponse.stop_reason === "max_tokens" || !isUsableAggregate(aggregateText, draftWords, targetTotalWords)) {
+          // Aggregation now returns structured JSON: { chapters: [{ idx, polished }] }.
+          // Parsing it lets us keep per-chapter TTS chunking after the polish pass.
+          // The alternative (treating the polished text as one big string and chunking
+          // monolithically) leaves TTS concurrency on the floor and reintroduces
+          // arbitrary mid-paragraph audio boundaries we'd just removed at the draft
+          // stage.
+          const polishedChapters = parseAggregateResponse(aggregateText, chapters.length);
+          const polishedScript = polishedChapters?.join("\n\n") ?? "";
+          const polishedFitsBudget = polishedChapters && isUsableAggregate(polishedScript, draftWords, targetTotalWords);
+
+          if (aggResponse.stop_reason === "max_tokens" || !polishedChapters || !polishedFitsBudget) {
             fullScript = assembleScriptFromDrafts(drafts);
+            chapterTexts = drafts.map((d) => d.trim()).filter(Boolean);
             await logRunEvent({
               generationId,
               stage: "aggregate",
@@ -304,14 +332,19 @@ export const generateAudiobook = task({
               kind: "info",
               response: {
                 mode: "local_assembly",
-                reason: aggResponse.stop_reason === "max_tokens" ? "aggregate_max_tokens" : "aggregate_too_short",
-                aggregateWordCount: countWords(aggregateText),
+                reason: aggResponse.stop_reason === "max_tokens"
+                  ? "aggregate_max_tokens"
+                  : !polishedChapters
+                    ? "aggregate_parse_failed"
+                    : "aggregate_too_short",
+                aggregateWordCount: countWords(polishedScript || aggregateText),
                 draftWords,
                 targetTotalWords,
               },
             });
           } else {
-            fullScript = aggregateText;
+            fullScript = polishedScript;
+            chapterTexts = polishedChapters;
           }
 
           await logRunEvent({ generationId, stage: "aggregate", provider: "anthropic", kind: "call", attempt: 1, durationMs: Date.now() - aggStart, response: { stopReason: aggResponse.stop_reason, wordCount: countWords(fullScript) } });
@@ -323,7 +356,15 @@ export const generateAudiobook = task({
       await setGenerationStatus(generationId, "synthesizing");
       logger.info("Stage 5: TTS synthesis", { generationId });
 
-      const chunks = splitIntoChunks(fullScript, MAX_CHUNK_CHARS);
+      // Per-chapter chunking when chapterTexts is available: each chapter
+      // becomes one or more chunks (split further only if it exceeds
+      // MAX_CHUNK_CHARS). Boundaries land at chapter ends, which are natural
+      // pause points for the listener instead of arbitrary mid-paragraph
+      // splits. The aggregation path falls back to monolithic chunking
+      // because the polished script no longer maps 1:1 to drafts.
+      const chunks = chapterTexts
+        ? chapterTexts.flatMap((text) => splitIntoChunks(text, MAX_CHUNK_CHARS))
+        : splitIntoChunks(fullScript, MAX_CHUNK_CHARS);
       await bumpProgress(generationId, "tts", { done: 0, total: chunks.length });
 
       const ttsBatch = await tasks.batchTriggerAndWait<typeof ttsChunk>(
@@ -341,21 +382,22 @@ export const generateAudiobook = task({
       });
       await bumpProgress(generationId, "tts", { done: chunks.length, total: chunks.length });
 
-      // Download chunks and stitch with ffmpeg
+      // Download chunks and stitch with ffmpeg. These are plain Supabase
+      // storage HTTP calls (not Trigger.dev wait functions), so Promise.all
+      // is safe; saves several seconds for a typical 10-20 chunk run.
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `${generationId}-`));
 
-      const localPaths: string[] = [];
-      for (let i = 0; i < chunkPaths.length; i++) {
-        const { data, error } = await supabase.storage
-          .from("tts-chunks")
-          .download(chunkPaths[i]);
-        if (error || !data) {
-          throw new AppError({ stage: "stitch", provider: "supabase", code: "download_failed", attempt: 1, generationId, retriable: true }, `Failed to download chunk ${i}: ${error?.message}`);
-        }
-        const localPath = path.join(tmpDir, `${i}.mp3`);
-        fs.writeFileSync(localPath, Buffer.from(await data.arrayBuffer()));
-        localPaths.push(localPath);
-      }
+      const localPaths = await Promise.all(
+        chunkPaths.map(async (chunkPath, i) => {
+          const { data, error } = await supabase.storage.from("tts-chunks").download(chunkPath);
+          if (error || !data) {
+            throw new AppError({ stage: "stitch", provider: "supabase", code: "download_failed", attempt: 1, generationId, retriable: true }, `Failed to download chunk ${i}: ${error?.message}`);
+          }
+          const localPath = path.join(tmpDir, `${i}.mp3`);
+          fs.writeFileSync(localPath, Buffer.from(await data.arrayBuffer()));
+          return localPath;
+        }),
+      );
 
       const concatListPath = path.join(tmpDir, "list.txt");
       fs.writeFileSync(concatListPath, localPaths.map((p) => `file '${path.basename(p)}'`).join("\n"));
@@ -363,10 +405,26 @@ export const generateAudiobook = task({
       const outPath = path.join(tmpDir, "out.mp3");
 
       try {
-        await execa("ffmpeg", ["-f", "concat", "-safe", "0", "-i", concatListPath, "-c", "copy", outPath], {
-          cwd: tmpDir,
-          stdio: "pipe",
-        });
+        // Re-encode through libmp3lame instead of -c copy. With per-chapter
+        // chunks (~6 boundaries on a 20-min generation) and xAI returning
+        // chunks whose MP3 frames don't always line up byte-for-byte,
+        // stream-copy concat produces corrupted frames at the joins:
+        // mid-word cuts, dropouts, "stops randomly" on playback. Re-encoding
+        // normalizes the entire output stream and adds 5-10s of CPU on
+        // stitch; small price for clean audio.
+        await execa(
+          "ffmpeg",
+          [
+            "-f", "concat",
+            "-safe", "0",
+            "-i", concatListPath,
+            "-c:a", "libmp3lame",
+            "-b:a", "128k",
+            "-ar", "24000",
+            outPath,
+          ],
+          { cwd: tmpDir, stdio: "pipe" },
+        );
       } catch (err: unknown) {
         const e = err as { stderr?: string };
         throw new AppError({ stage: "stitch", provider: "ffmpeg", code: "concat_failed", upstreamBody: truncateForStorage(e.stderr), attempt: 1, generationId, retriable: true }, `ffmpeg concat failed: ${e.stderr}`, err as Error);
@@ -380,7 +438,7 @@ export const generateAudiobook = task({
         });
         durationSeconds = Math.round(parseFloat(stdout));
       } catch {
-        // Non-fatal — duration just won't be set
+        // Non-fatal; duration just won't be set
       }
 
       // Upload final MP3
@@ -394,10 +452,11 @@ export const generateAudiobook = task({
         throw new AppError({ stage: "storage", provider: "supabase", code: "upload_failed", attempt: 1, generationId, retriable: true }, `Failed to upload final audio: ${audioUploadError.message}`);
       }
 
-      // Cleanup tmp and tts-chunks
+      // Cleanup tmp and tts-chunks. The remove() API accepts a list, so one
+      // round trip beats N sequential ones.
       fs.rmSync(tmpDir, { recursive: true, force: true });
-      for (const p of chunkPaths) {
-        await supabase.storage.from("tts-chunks").remove([p]);
+      if (chunkPaths.length > 0) {
+        await supabase.storage.from("tts-chunks").remove(chunkPaths);
       }
 
       // Mark complete

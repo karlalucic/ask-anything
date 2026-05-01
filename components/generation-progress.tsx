@@ -96,12 +96,16 @@ export function GenerationProgress({ generationId, initialGeneration, initialCha
       })
       .subscribe();
 
-    // Fallback polling if Realtime goes quiet for 90s
+    // Fallback polling. Tight enough to feel live even when Realtime isn't
+    // enabled on the generations / chapters tables (a Supabase publication
+    // setting that's easy to forget). Starts polling after 12s of silence,
+    // then every 4s. With Realtime enabled the timer fires harmlessly and
+    // the silence threshold is rarely hit since events keep arriving.
     pollTimerRef.current = setInterval(() => {
-      if (Date.now() - lastEventAt.current > 90_000) {
+      if (Date.now() - lastEventAt.current > 12_000) {
         fetchLatest();
       }
-    }, 10_000);
+    }, 4_000);
 
     return () => {
       supabase.removeChannel(genChannel);
