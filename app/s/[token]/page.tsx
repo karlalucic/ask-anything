@@ -13,6 +13,7 @@ import { captureServerEvent } from "@/lib/posthog-server";
 import { createAudioSignedUrl } from "@/lib/supabase/audio";
 import { hashShareToken } from "@/lib/sharing";
 import { buildChapterMarks } from "@/lib/chapter-marks";
+import { formatGenerationRuntime } from "@/lib/format-runtime";
 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
   const { token } = await params;
@@ -100,6 +101,10 @@ export default async function SharedListenPage({ params }: { params: Promise<{ t
           <h1 className="text-2xl font-normal leading-snug text-white">{generation.title ?? generation.topic}</h1>
           <p className="text-sm text-white/40 mt-1">
             {generation.duration} min podcast
+            {(() => {
+              const runtime = formatGenerationRuntime(generation.createdAt, generation.completedAt);
+              return runtime ? <> · generated in {runtime}</> : null;
+            })()}
           </p>
         </div>
 

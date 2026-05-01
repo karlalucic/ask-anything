@@ -13,6 +13,7 @@ import { SiteNav } from "@/components/site-nav";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
 import { createAudioSignedUrl } from "@/lib/supabase/audio";
 import { buildChapterMarks } from "@/lib/chapter-marks";
+import { formatGenerationRuntime } from "@/lib/format-runtime";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
@@ -116,6 +117,10 @@ export default async function ListenPage({ params }: { params: Promise<{ id: str
           <p className="text-sm text-white/40 mt-1">
             {generation.duration} min ·{" "}
             {generation.familiarity} · {generation.intent.replace("_", " ")}
+            {(() => {
+              const runtime = formatGenerationRuntime(generation.createdAt, generation.completedAt);
+              return runtime ? <> · generated in {runtime}</> : null;
+            })()}
           </p>
         </div>
 
