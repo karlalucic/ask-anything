@@ -235,6 +235,13 @@ export const generateAudiobook = task({
       await setGenerationStatus(generationId, "aggregating");
 
       let fullScript: string;
+      // When the audio was synthesized from per-chapter text (local concat or
+      // a fallback from aggregation), we keep that decomposition so the TTS
+      // stage can chunk along chapter boundaries instead of arbitrary 12k
+      // marks. When the polished aggregate script is used, the drafts are no
+      // longer a structural match for the audio, so we keep null and fall
+      // back to monolithic chunking.
+      let chapterTexts: string[] | null = null;
       if (existingGeneration?.full_script && isScriptLongEnough(existingGeneration.full_script, targetTotalWords)) {
         fullScript = existingGeneration.full_script;
         logger.info("Stage 4: Reusing cached full_script", { generationId, wordCount: countWords(fullScript) });
@@ -252,6 +259,7 @@ export const generateAudiobook = task({
 
         if (!shouldUseModelAggregation(targetTotalWords)) {
           fullScript = assembleScriptFromDrafts(drafts);
+          chapterTexts = drafts.map((d) => d.trim()).filter(Boolean);
           logger.info("Stage 4: Assembled long script locally", { generationId, wordCount: countWords(fullScript), targetTotalWords });
           await logRunEvent({
             generationId,
@@ -303,6 +311,7 @@ export const generateAudiobook = task({
           const aggregateText = aggResponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
           if (aggResponse.stop_reason === "max_tokens" || !isUsableAggregate(aggregateText, draftWords, targetTotalWords)) {
             fullScript = assembleScriptFromDrafts(drafts);
+            chapterTexts = drafts.map((d) => d.trim()).filter(Boolean);
             await logRunEvent({
               generationId,
               stage: "aggregate",
@@ -329,7 +338,15 @@ export const generateAudiobook = task({
       await setGenerationStatus(generationId, "synthesizing");
       logger.info("Stage 5: TTS synthesis", { generationId });
 
-      const chunks = splitIntoChunks(fullScript, MAX_CHUNK_CHARS);
+      // Per-chapter chunking when chapterTexts is available: each chapter
+      // becomes one or more chunks (split further only if it exceeds
+      // MAX_CHUNK_CHARS). Boundaries land at chapter ends, which are natural
+      // pause points for the listener instead of arbitrary mid-paragraph
+      // splits. The aggregation path falls back to monolithic chunking
+      // because the polished script no longer maps 1:1 to drafts.
+      const chunks = chapterTexts
+        ? chapterTexts.flatMap((text) => splitIntoChunks(text, MAX_CHUNK_CHARS))
+        : splitIntoChunks(fullScript, MAX_CHUNK_CHARS);
       await bumpProgress(generationId, "tts", { done: 0, total: chunks.length });
 
       const ttsBatch = await tasks.batchTriggerAndWait<typeof ttsChunk>(
