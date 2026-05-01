@@ -19,9 +19,12 @@ export default async function LibraryPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/library");
 
+  // Library cards only render title/status/duration/timestamp/stage_progress.
+  // Skip the heavy columns (full_script, outline, style_*, sources_config) —
+  // they only matter on the detail page.
   const { data } = await supabase
     .from("generations")
-    .select("id, user_id, title, topic, duration, familiarity, intent, voice, style_input, style_card, style_followups, sources_config, outline, full_script, audio_path, audio_duration_seconds, status, visibility, stage_progress, error, trigger_run_id, created_at, completed_at")
+    .select("id, title, topic, duration, audio_duration_seconds, status, stage_progress, created_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -99,7 +102,7 @@ async function getSharedLibraryItems(userId: string): Promise<SharedLibraryItem[
   const [{ data: sharedGenerations }, { data: owners }] = await Promise.all([
     serviceClient
       .from("generations")
-      .select("id, user_id, title, topic, duration, familiarity, intent, voice, style_input, style_card, style_followups, sources_config, outline, full_script, audio_path, audio_duration_seconds, status, visibility, stage_progress, error, trigger_run_id, created_at, completed_at")
+      .select("id, title, topic, duration, audio_duration_seconds, status, stage_progress, created_at")
       .in("id", generationIds)
       .eq("status", "complete"),
     serviceClient
