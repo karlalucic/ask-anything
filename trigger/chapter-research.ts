@@ -12,7 +12,11 @@ const MAX_ITERATIONS = 3;
 
 export const chapterResearch = task({
   id: "chapter-research",
-  queue: { name: "chapter-research", concurrencyLimit: 2 },
+  // Bumped from 2 to 6 so a typical 6-chapter generation researches every
+  // chapter at once instead of in 3 sequential batches. Anthropic rate limit
+  // risk is real but small at this scale; the task already retries on
+  // transient failures so a brief 429 doesn't fail the run.
+  queue: { name: "chapter-research", concurrencyLimit: 6 },
   maxDuration: 600,
   run: async (payload: {
     generationId: string;
