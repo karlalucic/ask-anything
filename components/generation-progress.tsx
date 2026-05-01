@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toChapter, toGeneration } from "@/lib/supabase/mappers";
@@ -10,16 +10,39 @@ const STAGE_ORDER: GenerationStatus[] = ["queued", "outlining", "researching", "
 
 const STAGE_LABEL: Record<string, string> = {
   queued: "queued",
-  outlining: "outlining",
+  outlining: "writing the outline",
+  researching: "researching the story",
+  drafting: "drafting chapters",
+  aggregating: "polishing the script",
+  synthesizing: "recording narration",
+  complete: "complete",
+};
+
+const STAGE_COPY: Record<string, string> = {
+  queued: "warming up",
+  outlining: "shaping the story arc",
+  researching: "gathering facts and sources",
+  drafting: "writing each chapter",
+  aggregating: "weaving chapters together",
+  synthesizing: "voicing your script",
+};
+
+const CHAPTER_STATUS_LABEL: Record<string, string> = {
   researching: "researching",
   drafting: "drafting",
-  aggregating: "polishing",
-  synthesizing: "narrating",
-  complete: "complete",
+  done: "ready",
+  failed: "failed",
 };
 
 function stageIndex(status: GenerationStatus): number {
   return STAGE_ORDER.indexOf(status);
+}
+
+function formatElapsed(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 interface Props {
@@ -96,37 +119,77 @@ export function GenerationProgress({ generationId, initialGeneration, initialCha
   const currentStageIdx = stageIndex(generation.status as GenerationStatus);
   const isTerminal = ["complete", "failed", "canceled"].includes(generation.status);
 
+  const startedAtMs = useMemo(() => {
+    return generation.createdAt ? new Date(generation.createdAt).getTime() : null;
+  }, [generation.createdAt]);
+
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    if (isTerminal || startedAtMs == null) return;
+    const tick = () => setElapsedMs(Date.now() - startedAtMs);
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [isTerminal, startedAtMs]);
+
+  const chapterCounts = useMemo(() => {
+    const total = chapters.length;
+    const researching = chapters.filter((c) => c.status === "researching").length;
+    const drafting = chapters.filter((c) => c.status === "drafting").length;
+    const done = chapters.filter((c) => c.status === "done").length;
+    return { total, researching, drafting, done };
+  }, [chapters]);
+
+  const stageDetail =
+    generation.status === "researching" && chapterCounts.total > 0
+      ? `${chapterCounts.done + chapterCounts.drafting} of ${chapterCounts.total} researched`
+      : generation.status === "drafting" && chapterCounts.total > 0
+      ? `${chapterCounts.done} of ${chapterCounts.total} drafted`
+      : generation.status === "synthesizing" && generation.stageProgress?.tts
+      ? `chunk ${generation.stageProgress.tts.done} of ${generation.stageProgress.tts.total}`
+      : null;
+
   return (
     <div className="space-y-8">
       {/* Stage strip */}
       <div>
         <div className="flex items-center gap-0 mb-4">
-          {STAGE_ORDER.filter((s) => s !== "queued").map((stage, i) => {
+          {STAGE_ORDER.filter((s) => s !== "queued").map((stage, i, arr) => {
             const idx = stageIndex(stage);
             const done = currentStageIdx > idx;
             const active = currentStageIdx === idx && !isTerminal;
             return (
               <div key={stage} className="flex items-center flex-1">
-                <div className={`w-2 h-2 rounded-full shrink-0 ${done ? "bg-white" : active ? "bg-white animate-pulse" : "bg-white/20"}`} />
-                {i < STAGE_ORDER.length - 2 && <div className={`flex-1 h-px ${done ? "bg-white/60" : "bg-white/10"}`} />}
+                <div className={`relative shrink-0 ${active ? "w-2.5 h-2.5" : "w-2 h-2"} rounded-full transition-all ${done ? "bg-white" : active ? "bg-white" : "bg-white/15"}`}>
+                  {active && <span className="absolute inset-0 rounded-full bg-white animate-ping opacity-60" />}
+                </div>
+                {i < arr.length - 1 && <div className={`flex-1 h-px transition-colors ${done ? "bg-white/60" : "bg-white/10"}`} />}
               </div>
             );
           })}
         </div>
-        <p className="text-sm text-white/50">
-          {generation.status === "failed" ? (
-            <span className="text-red-400">{(generation.error as { message?: string } | null)?.message ?? "generation failed"}</span>
-          ) : generation.status === "canceled" ? (
-            "canceled"
-          ) : (
-            STAGE_LABEL[generation.status] ?? generation.status
+        <div className="flex items-baseline justify-between gap-4">
+          <div>
+            <p className="text-sm text-white/70">
+              {generation.status === "failed" ? (
+                <span className="text-red-400">{(generation.error as { message?: string } | null)?.message ?? "generation failed"}</span>
+              ) : generation.status === "canceled" ? (
+                "canceled"
+              ) : (
+                <>
+                  {STAGE_LABEL[generation.status] ?? generation.status}
+                  {stageDetail && <span className="ml-2 text-white/30 tabular-nums">· {stageDetail}</span>}
+                </>
+              )}
+            </p>
+            {!isTerminal && STAGE_COPY[generation.status] && (
+              <p className="mt-1 text-xs text-white/30">{STAGE_COPY[generation.status]}</p>
+            )}
+          </div>
+          {!isTerminal && (
+            <span className="text-xs tabular-nums text-white/30">{formatElapsed(elapsedMs)}</span>
           )}
-          {generation.stageProgress?.research && ["researching", "drafting"].includes(generation.status) && (
-            <span className="ml-2 text-white/30">
-              {generation.stageProgress.research.done}/{generation.stageProgress.research.total} chapters
-            </span>
-          )}
-        </p>
+        </div>
       </div>
 
       {/* Error card */}
@@ -155,23 +218,53 @@ export function GenerationProgress({ generationId, initialGeneration, initialCha
       )}
 
       {/* Chapter checklist */}
-      {chapters.length > 0 && (
+      {chapters.length > 0 ? (
+        <div className="space-y-1">
+          <div className="flex items-baseline justify-between mb-2">
+            <h3 className="text-sm font-medium text-white/50">Chapters</h3>
+            {chapterCounts.total > 0 && !isTerminal && (
+              <span className="text-xs tabular-nums text-white/30">
+                {chapterCounts.done}/{chapterCounts.total}
+              </span>
+            )}
+          </div>
+          {chapters.map((c) => {
+            const isActive = ["researching", "drafting"].includes(c.status);
+            const isDone = c.status === "done";
+            const isFailed = c.status === "failed";
+            return (
+              <div key={c.idx} className="flex items-center gap-3 py-1.5">
+                <div className={`relative w-1.5 h-1.5 rounded-full shrink-0 ${
+                  isDone ? "bg-white" :
+                  isFailed ? "bg-red-500" :
+                  isActive ? "bg-white/70" :
+                  "bg-white/15"
+                }`}>
+                  {isActive && <span className="absolute inset-0 rounded-full bg-white animate-ping opacity-50" />}
+                </div>
+                <span className={`text-sm flex-1 truncate ${isDone ? "text-white/80" : isActive ? "text-white/60" : "text-white/30"}`}>
+                  {c.title}
+                </span>
+                {isActive && (
+                  <span className="text-xs text-white/30 italic">{CHAPTER_STATUS_LABEL[c.status]}</span>
+                )}
+                {isDone && (
+                  <span className="text-xs text-white/30">ready</span>
+                )}
+                {isFailed && c.error && (
+                  <span className="text-xs text-red-400">{c.error.code}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : !isTerminal && currentStageIdx >= stageIndex("outlining") && (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-white/50">Chapters</h3>
-          {chapters.map((c) => (
-            <div key={c.idx} className="flex items-center gap-3 py-1">
-              <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                c.status === "done" ? "bg-white" :
-                c.status === "failed" ? "bg-red-500" :
-                ["researching", "drafting"].includes(c.status) ? "bg-white/60 animate-pulse" :
-                "bg-white/20"
-              }`} />
-              <span className={`text-sm ${c.status === "done" ? "text-white/70" : "text-white/30"}`}>
-                {c.title}
-              </span>
-              {c.status === "failed" && c.error && (
-                <span className="text-xs text-red-400">{c.error.code}</span>
-              )}
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex items-center gap-3 py-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-white/15 shrink-0" />
+              <div className="h-3 flex-1 max-w-[60%] rounded bg-white/5 animate-pulse" style={{ animationDelay: `${i * 150}ms` }} />
             </div>
           ))}
         </div>

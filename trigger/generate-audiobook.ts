@@ -20,9 +20,6 @@ import { getDurationWords } from "../lib/types";
 const MAX_CHUNK_CHARS = 12000;
 const AGGREGATION_MAX_OUTPUT_TOKENS = 16000;
 const MODEL_AGGREGATION_WORD_LIMIT = 10000;
-const RESEARCH_CONCURRENCY = 2;
-const DRAFT_CONCURRENCY = 2;
-const TTS_CONCURRENCY = 3;
 
 interface GeneratePayload {
   generationId: string;
@@ -72,36 +69,6 @@ function isScriptLongEnough(script: string, targetWords: number): boolean {
 
 function isUsableAggregate(script: string, draftWords: number, targetWords: number): boolean {
   return countWords(script) >= Math.floor(Math.min(draftWords, targetWords) * 0.75);
-}
-
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let nextIndex = 0;
-  let failed = false;
-
-  async function runWorker() {
-    while (!failed) {
-      const index = nextIndex++;
-      if (index >= items.length) return;
-
-      try {
-        results[index] = await worker(items[index], index);
-      } catch (err) {
-        failed = true;
-        throw err;
-      }
-    }
-  }
-
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => runWorker()),
-  );
-
-  return results;
 }
 
 export const generateAudiobook = task({
@@ -215,48 +182,48 @@ export const generateAudiobook = task({
       await bumpProgress(generationId, "research", { done: 0, total: chapters.length });
       logger.info("Stage 2: Researching chapters", { generationId, chapterCount: chapters.length });
 
-      let completedResearch = 0;
-      const researchResults = await mapWithConcurrency(chapters, RESEARCH_CONCURRENCY, async (chapter, i) => {
-        const result = await tasks.triggerAndWait<typeof chapterResearch>("chapter-research", {
-          generationId,
-          userId,
-          chapterIdx: i,
-          chapter,
-          sourcesConfig,
-        });
+      const researchBatch = await tasks.batchTriggerAndWait<typeof chapterResearch>(
+        "chapter-research",
+        chapters.map((chapter, i) => ({
+          payload: { generationId, userId, chapterIdx: i, chapter, sourcesConfig },
+        })),
+      );
 
-        if (!result.ok) {
+      const researchResults = researchBatch.runs.map((run, i) => {
+        if (!run.ok) {
           throw new AppError({ stage: "research", provider: "anthropic", code: "child_task_failed", attempt: 1, generationId, chapterIdx: i, retriable: true }, `Chapter ${i} research failed`);
         }
-        completedResearch += 1;
-        await bumpProgress(generationId, "research", { done: completedResearch, total: chapters.length });
-        return result.output;
+        return run.output;
       });
+      await bumpProgress(generationId, "research", { done: chapters.length, total: chapters.length });
 
       // ── Stage 3: Drafting ─────────────────────────────────────────────────
       await setGenerationStatus(generationId, "drafting");
       await bumpProgress(generationId, "drafting", { done: 0, total: chapters.length });
       logger.info("Stage 3: Drafting chapters", { generationId });
 
-      let completedDrafts = 0;
-      const drafts = await mapWithConcurrency(chapters, DRAFT_CONCURRENCY, async (chapter, i) => {
-        const result = await tasks.triggerAndWait<typeof chapterDraft>("chapter-draft", {
-          generationId,
-          userId,
-          chapterIdx: i,
-          chapter,
-          research: researchResults[i],
-          styleCard,
-          totalChapters: chapters.length,
-        });
+      const draftBatch = await tasks.batchTriggerAndWait<typeof chapterDraft>(
+        "chapter-draft",
+        chapters.map((chapter, i) => ({
+          payload: {
+            generationId,
+            userId,
+            chapterIdx: i,
+            chapter,
+            research: researchResults[i],
+            styleCard,
+            totalChapters: chapters.length,
+          },
+        })),
+      );
 
-        if (!result.ok) {
+      const drafts = draftBatch.runs.map((run, i) => {
+        if (!run.ok) {
           throw new AppError({ stage: "draft", provider: "anthropic", code: "child_task_failed", attempt: 1, generationId, chapterIdx: i, retriable: true }, `Chapter ${i} draft failed`);
         }
-        completedDrafts += 1;
-        await bumpProgress(generationId, "drafting", { done: completedDrafts, total: chapters.length });
-        return result.output;
+        return run.output;
       });
+      await bumpProgress(generationId, "drafting", { done: chapters.length, total: chapters.length });
 
       // ── Stage 4: Aggregation ──────────────────────────────────────────────
       await setGenerationStatus(generationId, "aggregating");
@@ -359,23 +326,20 @@ export const generateAudiobook = task({
       const chunks = splitIntoChunks(fullScript, MAX_CHUNK_CHARS);
       await bumpProgress(generationId, "tts", { done: 0, total: chunks.length });
 
-      let completedTts = 0;
-      const chunkPaths = await mapWithConcurrency(chunks, TTS_CONCURRENCY, async (text, i) => {
-        const result = await tasks.triggerAndWait<typeof ttsChunk>("tts-chunk", {
-          generationId,
-          userId,
-          chunkIdx: i,
-          text,
-          voice,
-        });
+      const ttsBatch = await tasks.batchTriggerAndWait<typeof ttsChunk>(
+        "tts-chunk",
+        chunks.map((text, i) => ({
+          payload: { generationId, userId, chunkIdx: i, text, voice },
+        })),
+      );
 
-        if (!result.ok) {
+      const chunkPaths = ttsBatch.runs.map((run, i) => {
+        if (!run.ok) {
           throw new AppError({ stage: "tts", provider: "xai", code: "child_task_failed", attempt: 1, generationId, retriable: true }, `TTS chunk ${i} failed`);
         }
-        completedTts += 1;
-        await bumpProgress(generationId, "tts", { done: completedTts, total: chunks.length });
-        return result.output;
+        return run.output;
       });
+      await bumpProgress(generationId, "tts", { done: chunks.length, total: chunks.length });
 
       // Download chunks and stitch with ffmpeg
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `${generationId}-`));
@@ -465,9 +429,9 @@ export const generateAudiobook = task({
 
     } catch (err: unknown) {
       const errorInfo = err instanceof AppError ? err.info : {
-        stage: "outline" as const,
+        stage: "unknown" as const,
         provider: "internal" as const,
-        code: "unknown",
+        code: (err as { message?: string })?.message?.slice(0, 200) ?? "unknown",
         attempt: 1,
         generationId,
         retriable: false,
