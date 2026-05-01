@@ -273,11 +273,18 @@ export const generateAudiobook = task({
           logger.info("Stage 4: Aggregating script", { generationId });
 
           const draftWords = drafts.reduce((sum, draft) => sum + countWords(draft), 0);
-          const aggregatePrompt = buildAggregatePrompt({
+          const { system: aggregateSystem, user: aggregateUser } = buildAggregatePrompt({
             chapters: chapters.map((c, i) => ({ title: c.title, draft: drafts[i] })),
             styleCard,
             targetTotalWords,
           });
+
+          // Tighten the output ceiling around the actual draft size so Haiku
+          // can't pad. ~1.5 tokens per word with 15% headroom for bridges.
+          const aggregateMaxTokens = Math.min(
+            AGGREGATION_MAX_OUTPUT_TOKENS,
+            Math.max(2048, Math.ceil(draftWords * 1.5 * 1.15)),
+          );
 
           const aggStart = Date.now();
           await logRunEvent({ generationId, stage: "aggregate", provider: "anthropic", kind: "call", attempt: 1 });
@@ -286,8 +293,9 @@ export const generateAudiobook = task({
           try {
             aggResponse = await anthropic.messages.stream({
               model: AGGREGATION_MODEL,
-              max_tokens: AGGREGATION_MAX_OUTPUT_TOKENS,
-              messages: [{ role: "user", content: aggregatePrompt }],
+              max_tokens: aggregateMaxTokens,
+              system: [{ type: "text", text: aggregateSystem, cache_control: { type: "ephemeral" } }],
+              messages: [{ role: "user", content: aggregateUser }],
             }).finalMessage();
           } catch (err: unknown) {
             const e = err as { status?: number; message?: string };
