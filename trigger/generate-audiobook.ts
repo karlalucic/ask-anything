@@ -7,7 +7,7 @@ import * as path from "path";
 import * as os from "os";
 import { PostHog } from "posthog-node";
 import { buildOutlinePrompt, parseOutlineResponse } from "../lib/prompts/outline";
-import { buildAggregatePrompt } from "../lib/prompts/aggregate";
+import { buildAggregatePrompt, parseAggregateResponse } from "../lib/prompts/aggregate";
 import { setGenerationStatus, bumpProgress, logRunEvent } from "../lib/supabase/progress";
 import { recordProviderUsage } from "../lib/usage/record";
 import { AppError, truncateForStorage } from "../lib/errors";
@@ -317,7 +317,17 @@ export const generateAudiobook = task({
           });
 
           const aggregateText = aggResponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
-          if (aggResponse.stop_reason === "max_tokens" || !isUsableAggregate(aggregateText, draftWords, targetTotalWords)) {
+          // Aggregation now returns structured JSON: { chapters: [{ idx, polished }] }.
+          // Parsing it lets us keep per-chapter TTS chunking after the polish pass —
+          // the alternative (treating the polished text as one big string and chunking
+          // monolithically) leaves TTS concurrency on the floor and reintroduces
+          // arbitrary mid-paragraph audio boundaries we'd just removed at the draft
+          // stage.
+          const polishedChapters = parseAggregateResponse(aggregateText, chapters.length);
+          const polishedScript = polishedChapters?.join("\n\n") ?? "";
+          const polishedFitsBudget = polishedChapters && isUsableAggregate(polishedScript, draftWords, targetTotalWords);
+
+          if (aggResponse.stop_reason === "max_tokens" || !polishedChapters || !polishedFitsBudget) {
             fullScript = assembleScriptFromDrafts(drafts);
             chapterTexts = drafts.map((d) => d.trim()).filter(Boolean);
             await logRunEvent({
@@ -327,14 +337,19 @@ export const generateAudiobook = task({
               kind: "info",
               response: {
                 mode: "local_assembly",
-                reason: aggResponse.stop_reason === "max_tokens" ? "aggregate_max_tokens" : "aggregate_too_short",
-                aggregateWordCount: countWords(aggregateText),
+                reason: aggResponse.stop_reason === "max_tokens"
+                  ? "aggregate_max_tokens"
+                  : !polishedChapters
+                    ? "aggregate_parse_failed"
+                    : "aggregate_too_short",
+                aggregateWordCount: countWords(polishedScript || aggregateText),
                 draftWords,
                 targetTotalWords,
               },
             });
           } else {
-            fullScript = aggregateText;
+            fullScript = polishedScript;
+            chapterTexts = polishedChapters;
           }
 
           await logRunEvent({ generationId, stage: "aggregate", provider: "anthropic", kind: "call", attempt: 1, durationMs: Date.now() - aggStart, response: { stopReason: aggResponse.stop_reason, wordCount: countWords(fullScript) } });
