@@ -160,8 +160,10 @@ export function AudioPlayer({ src, durationSeconds, chapters }: Props) {
       </div>
 
       {chapters && chapters.length > 0 && (
-        <ol className="mt-6 border-t border-white/10 pt-5 space-y-1">
-          {chapters.map((c) => {
+        <div className="mt-6 border-t border-white/10 pt-5">
+          <h3 className="mb-3 px-2 text-xs font-medium uppercase tracking-wide text-white/40">Chapters</h3>
+          <ol className="space-y-1">
+            {chapters.map((c) => {
             const isActive = c.idx === activeChapterIdx;
             return (
               <li key={c.idx}>
@@ -178,10 +180,11 @@ export function AudioPlayer({ src, durationSeconds, chapters }: Props) {
                   </span>
                   <span className="truncate">{c.title}</span>
                 </button>
-              </li>
-            );
-          })}
-        </ol>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
       )}
     </div>
   );
