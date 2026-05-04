@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { LogOutButton } from "@/components/log-out-button";
 import { SiteNav } from "@/components/site-nav";
 import { buttonVariants } from "@/components/ui/button";
+import { isAdminUser } from "@/lib/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +11,7 @@ export default async function AccountPage() {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/account");
+  const isAdmin = isAdminUser(user);
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -42,6 +44,11 @@ export default async function AccountPage() {
             <Link href="/library" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
               Open library
             </Link>
+            {isAdmin && (
+              <Link href="/admin/cost" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                Open admin
+              </Link>
+            )}
             <LogOutButton />
           </div>
         </div>
