@@ -22,9 +22,6 @@ export default async function AccountPage() {
 
   return (
     <main className="min-h-screen bg-black text-white">
-      <SiteNav>
-        <Link href="/library" className="text-sm text-white/70 transition-colors duration-150 hover:text-white">Library</Link>
-      </SiteNav>
 
       <div className="mx-auto max-w-2xl px-6 py-12">
         <h1 className="mb-8 text-2xl font-normal leading-snug text-white">Account</h1>
