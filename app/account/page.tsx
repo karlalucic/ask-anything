@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { DeleteAccountButton } from "@/components/delete-account-button";
 import { LogOutButton } from "@/components/log-out-button";
 import { SiteNav } from "@/components/site-nav";
 import { buttonVariants } from "@/components/ui/button";
@@ -52,6 +53,10 @@ export default async function AccountPage() {
             <LogOutButton />
           </div>
         </div>
+
+        <section className="mt-6">
+          <DeleteAccountButton />
+        </section>
       </div>
     </main>
   );
