@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { User } from "lucide-react";
 
 import { HeroBackdrop } from "@/components/hero-backdrop";
 import { IntroModal } from "@/components/intro-modal";
@@ -72,17 +73,14 @@ function LoggedInHome() {
       <HeroBackdrop />
       <div className="relative z-10">
         <SiteNav>
-          <>
-            <Link href="/library" className="text-sm text-white/70 transition-colors duration-150 hover:text-white">
-              Library
-            </Link>
-            <Link href="/account" className="text-sm text-white/70 transition-colors duration-150 hover:text-white">
-              Account
-            </Link>
-            <Link href="/new" className={cn(buttonVariants({ size: "sm" }))}>
-              New podcast
-            </Link>
-          </>
+          <Link
+            href="/account"
+            aria-label="Account"
+            className={cn(buttonVariants({ variant: "outline", size: "icon" }), "text-white/80 hover:text-white")}
+          >
+            <User aria-hidden className="size-4" />
+            <span className="sr-only">Account</span>
+          </Link>
         </SiteNav>
       </div>
       <div className="relative z-10 mx-auto flex min-h-[calc(100svh-88px)] max-w-6xl flex-col justify-center gap-12 px-6 py-14 lg:flex-row lg:items-center lg:py-20">

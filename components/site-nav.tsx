@@ -9,7 +9,7 @@ export function SiteNav({ children, minimal = false }: { children?: ReactNode; m
           ask anything
         </Link>
         {children ? (
-          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-2 sm:flex-none sm:flex-nowrap sm:justify-end sm:gap-3 max-sm:basis-full max-sm:[&>*]:min-h-11 max-sm:[&>a]:inline-flex max-sm:[&>a]:items-center max-sm:[&>a]:rounded-full max-sm:[&>a]:px-3 max-sm:[&>button]:min-w-11">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:flex-none sm:flex-nowrap sm:gap-3 max-sm:[&>*]:min-h-11 max-sm:[&>a]:inline-flex max-sm:[&>a]:items-center max-sm:[&>a]:rounded-full max-sm:[&>button]:min-w-11">
             {children}
           </div>
         ) : minimal ? (
