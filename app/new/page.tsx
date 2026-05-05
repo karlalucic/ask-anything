@@ -9,7 +9,7 @@ export default async function NewPage() {
   return (
     <main className="min-h-screen bg-black text-white">
       <SiteNav minimal />
-      <div className="mx-auto max-w-2xl px-6 py-12">
+      <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6 sm:py-12">
         <h1 className="mb-10 text-2xl font-normal leading-snug text-white">New podcast</h1>
         <ConfigWizard initialAuthed={!!user} />
       </div>

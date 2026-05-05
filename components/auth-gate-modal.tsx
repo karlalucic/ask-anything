@@ -51,7 +51,7 @@ export function AuthGateModal({ open, onClose }: AuthGateModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-[calc(env(safe-area-inset-top)+1rem)] backdrop-blur-sm"
       onClick={onClose}
       role="presentation"
     >
@@ -62,7 +62,7 @@ export function AuthGateModal({ open, onClose }: AuthGateModalProps) {
         aria-labelledby="auth-gate-title"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="liquid-glass w-full max-w-sm rounded-2xl p-8 outline-none"
+        className="liquid-glass w-full max-w-sm rounded-2xl p-6 outline-none sm:p-8"
       >
         <h2 id="auth-gate-title" className="font-display text-3xl leading-tight text-white">
           Save your draft

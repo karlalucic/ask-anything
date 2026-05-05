@@ -67,7 +67,7 @@ export function IntroModal({ initiallyOpen }: IntroModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-[calc(env(safe-area-inset-top)+1rem)] backdrop-blur-sm"
       role="presentation"
       onClick={() => dismiss("skipped")}
     >
@@ -78,7 +78,7 @@ export function IntroModal({ initiallyOpen }: IntroModalProps) {
         aria-labelledby="intro-title"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="liquid-glass relative w-full max-w-md rounded-2xl p-8 outline-none"
+        className="liquid-glass relative w-full max-w-md rounded-2xl p-6 outline-none sm:p-8"
       >
         <button
           type="button"

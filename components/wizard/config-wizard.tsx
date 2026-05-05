@@ -9,13 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { clearDraft, loadDraft, saveDraft } from "@/lib/draft-storage";
+import { clearDraft, loadDraft, saveDraft, type WizardDraftStep } from "@/lib/draft-storage";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { FamiliarityLevel, IntentType, VoiceId, StyleCard, StyleFollowup, SourcesConfig } from "@/lib/types";
 import { VOICE_LABELS } from "@/lib/types";
 import { Slider } from "@/components/ui/slider";
 
-type Step = "meta" | "style" | "sources" | "voice" | "review";
+type Step = WizardDraftStep;
 
 interface FormState {
   topic: string;
@@ -60,7 +60,7 @@ function formatApiError(error: unknown, status?: number): string {
 
 function pillClass(selected: boolean, className?: string) {
   return cn(
-    "rounded-lg border px-4 py-2.5 text-sm transition-all duration-150 focus-visible:ring-1 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+    "min-h-11 rounded-lg border px-4 py-2.5 text-sm transition-all duration-150 focus-visible:ring-1 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
     selected
       ? "border-white bg-white text-black"
       : "border-white/15 bg-transparent text-white/50 hover:border-white/40 hover:text-white/80",
@@ -102,22 +102,32 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
         familiarity: draft.familiarity,
         intent: draft.intent,
         styleInput: draft.styleInput,
+        sourcesConfig: draft.sourcesConfig,
+        voice: draft.voice,
       }));
+      // The generated style card is provider output, so it is not persisted in
+      // localStorage. If a later step was saved, restore to style so the user
+      // can explicitly re-analyze before continuing.
+      setStep(draft.step === "meta" || draft.step === "style" ? draft.step : "style");
     }
     setHydrated(true);
   }, []);
 
-  // Persist draft to localStorage on change (only the meta + style input fields)
+  // Persist only recoverable user choices. Do not store auth tokens, signed URLs,
+  // secrets, provider responses, or generated audio/script content.
   useEffect(() => {
     if (!hydrated) return;
     saveDraft({
+      step,
       topic: form.topic,
       duration: form.duration,
       familiarity: form.familiarity,
       intent: form.intent,
       styleInput: form.styleInput,
+      sourcesConfig: form.sourcesConfig,
+      voice: form.voice,
     });
-  }, [hydrated, form.topic, form.duration, form.familiarity, form.intent, form.styleInput]);
+  }, [hydrated, step, form.topic, form.duration, form.familiarity, form.intent, form.styleInput, form.sourcesConfig, form.voice]);
 
   // Live auth state — sign-in in another tab dissolves the gate
   useEffect(() => {
@@ -133,7 +143,15 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
   }, []);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      if (["topic", "familiarity", "intent", "styleInput"].includes(String(key))) {
+        next.styleCard = null;
+        next.styleFollowups = [];
+        next.followupAnswers = [];
+      }
+      return next;
+    });
   }
 
   async function fetchStyleCard() {
@@ -241,8 +259,27 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
     if (idx > 0) setStep(STEPS[idx - 1]);
   }
 
+  const canContinue =
+    step === "meta" ? Boolean(form.topic.trim()) :
+    step === "style" ? Boolean(form.styleCard) && !styleLoading :
+    step === "review" ? Boolean(form.styleCard) && !generating :
+    true;
+
+  const primaryLabel =
+    step === "review"
+      ? generating ? "Starting" : "Generate podcast"
+      : "Continue";
+
+  function handlePrimaryAction() {
+    if (step === "review") {
+      void handleGenerate();
+      return;
+    }
+    next();
+  }
+
   return (
-    <div>
+    <div className="pb-[calc(7rem+env(safe-area-inset-bottom))] sm:pb-0">
       {/* Step indicator */}
       <div className="mb-10 flex flex-wrap items-center gap-2 text-xs">
         {STEPS.map((s, i) => {
@@ -334,7 +371,6 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
             </div>
           </div>
 
-          <Button className="w-full" onClick={next} disabled={!form.topic.trim()}>Continue</Button>
         </div>
       )}
 
@@ -344,13 +380,12 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
           <div>
             <Label htmlFor="styleInput" className="text-base font-medium text-white">Writing style</Label>
             <p className="text-sm text-white/50 mt-1">Name an author, publication, or describe a style.</p>
-            <div className="flex gap-2 mt-2">
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
               <Input
                 id="styleInput"
                 placeholder="e.g. The New Yorker, Michael Lewis, dryly funny"
                 value={form.styleInput}
                 onChange={(e) => update("styleInput", e.target.value)}
-                onBlur={fetchStyleCard}
                 className="flex-1"
               />
               <Button variant="outline" onClick={fetchStyleCard} disabled={styleLoading || !form.styleInput.trim()}>
@@ -404,10 +439,6 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
             </>
           )}
 
-          <div className="flex gap-3">
-            <Button variant="ghost" onClick={prev}>Back</Button>
-            <Button className="flex-1" onClick={next} disabled={!form.styleCard}>Continue</Button>
-          </div>
         </div>
       )}
 
@@ -446,10 +477,6 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
             </div>
           </div>
 
-          <div className="flex gap-3">
-            <Button variant="ghost" onClick={prev}>Back</Button>
-            <Button className="flex-1" onClick={next}>Continue</Button>
-          </div>
         </div>
       )}
 
@@ -477,10 +504,6 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
             </div>
           </div>
 
-          <div className="flex gap-3">
-            <Button variant="ghost" onClick={prev}>Back</Button>
-            <Button className="flex-1" onClick={next}>Continue</Button>
-          </div>
         </div>
       )}
 
@@ -506,14 +529,21 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
 
           {genError && <p className="rounded-xl border border-red-500/30 bg-red-950/40 p-4 text-sm text-red-400">{genError}</p>}
 
-          <div className="flex gap-3">
-            <Button variant="ghost" onClick={prev}>Back</Button>
-            <Button className="flex-1" onClick={handleGenerate} disabled={generating}>
-              {generating ? "Starting" : "Generate podcast"}
-            </Button>
-          </div>
         </div>
       )}
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-black/85 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-3 backdrop-blur-xl sm:static sm:mt-8 sm:border-0 sm:bg-transparent sm:px-0 sm:pb-0 sm:pt-0 sm:backdrop-blur-none">
+        <div className="mx-auto flex max-w-2xl gap-3">
+          {STEPS.indexOf(step) > 0 && (
+            <Button variant="ghost" onClick={prev} disabled={generating || styleLoading}>
+              Back
+            </Button>
+          )}
+          <Button className="flex-1" onClick={handlePrimaryAction} disabled={!canContinue}>
+            {primaryLabel}
+          </Button>
+        </div>
+      </div>
 
       <AuthGateModal open={showAuthGate} onClose={() => setShowAuthGate(false)} />
     </div>
