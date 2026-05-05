@@ -13,7 +13,6 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "Bartlett Design System/**",
-    "Bartlett Design System-2/**",
     "next-env.d.ts",
   ]),
 ]);
