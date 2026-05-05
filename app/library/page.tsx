@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { User } from "lucide-react";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 import { buttonVariants } from "@/components/ui/button";
@@ -36,8 +37,15 @@ export default async function LibraryPage() {
     <main className="min-h-screen bg-black text-white">
       <SiteNav>
         <>
-          <Link href="/account" className="text-sm text-white/70 transition-colors duration-150 hover:text-white">Account</Link>
-          <Link href="/new" className={cn(buttonVariants({ size: "sm" }))}>New podcast</Link>
+          <Link href="/new" className={cn(buttonVariants({ size: "sm" }))}>New</Link>
+          <Link
+            href="/account"
+            aria-label="Account"
+            className={cn(buttonVariants({ variant: "outline", size: "icon" }), "text-white/80 hover:text-white")}
+          >
+            <User aria-hidden className="size-4" />
+            <span className="sr-only">Account</span>
+          </Link>
         </>
       </SiteNav>
 
