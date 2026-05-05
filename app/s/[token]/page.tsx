@@ -10,7 +10,7 @@ import { ScriptDownloadButton } from "@/components/script-download-button";
 import { SiteNav } from "@/components/site-nav";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
 import { captureServerEvent } from "@/lib/posthog-server";
-import { createAudioSignedUrl } from "@/lib/supabase/audio";
+import { createAudioSignedUrlResponse } from "@/lib/supabase/audio";
 import { buildChapterMarks } from "@/lib/chapter-marks";
 
 export const metadata: Metadata = {
@@ -57,7 +57,7 @@ export default async function SharedListenPage({ params }: { params: Promise<{ t
     },
   });
   if (!generation.audioPath) notFound();
-  const audioUrl = await createAudioSignedUrl(generation.audioPath);
+  const audio = await createAudioSignedUrlResponse(generation.audioPath);
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -73,7 +73,10 @@ export default async function SharedListenPage({ params }: { params: Promise<{ t
 
         <div className="mb-10">
           <AudioPlayer
-            src={audioUrl}
+            src={audio.audioUrl}
+            expiresAt={audio.expiresAt}
+            refreshUrl={`/api/share-links/${encodeURIComponent(token)}/audio-url`}
+            localStorageKey={`aa:public-playback:${generation.id}`}
             durationSeconds={generation.audioDurationSeconds}
             chapters={buildChapterMarks(generation.chapters ?? [], generation.audioDurationSeconds)}
           />
@@ -82,7 +85,7 @@ export default async function SharedListenPage({ params }: { params: Promise<{ t
         <div className="mb-10 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <FeedbackButtons generationId={generation.id} shareToken={token} />
           <div className="flex items-center gap-2">
-            <DownloadButton audioUrl={audioUrl} title={generation.title ?? generation.topic} label="MP3" />
+            <DownloadButton audioUrl={audio.audioUrl} title={generation.title ?? generation.topic} label="MP3" />
             {generation.fullScript && (
               <ScriptDownloadButton script={generation.fullScript} title={generation.title ?? generation.topic} />
             )}

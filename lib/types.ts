@@ -117,6 +117,18 @@ export interface Chapter {
   updatedAt: string;
 }
 
+export interface AudioUrlResponse {
+  audioUrl: string;
+  expiresAt: string;
+}
+
+export interface PlaybackPosition {
+  generationId: string;
+  positionSeconds: number;
+  durationSeconds: number | null;
+  updatedAt: string | null;
+}
+
 export function getDurationWords(minutes: number): number {
   return Math.round(minutes * 150);
 }

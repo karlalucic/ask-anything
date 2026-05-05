@@ -10,7 +10,7 @@ import { ScriptDisplay } from "@/components/script-display";
 import { ScriptDownloadButton } from "@/components/script-download-button";
 import { SiteNav } from "@/components/site-nav";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
-import { createAudioSignedUrl } from "@/lib/supabase/audio";
+import { createAudioSignedUrlResponse } from "@/lib/supabase/audio";
 import { buildChapterMarks } from "@/lib/chapter-marks";
 
 export default async function ListenPage({ params }: { params: Promise<{ id: string }> }) {
@@ -32,15 +32,15 @@ export default async function ListenPage({ params }: { params: Promise<{ id: str
   const isOwner = generation.userId === user.id;
   const chapters = generation.chapters ?? [];
 
-  const audioUrl = generation.audioPath ? await createAudioSignedUrl(generation.audioPath) : null;
-  if (!isOwner && !audioUrl) notFound();
+  const audio = generation.audioPath ? await createAudioSignedUrlResponse(generation.audioPath) : null;
+  if (!isOwner && !audio) notFound();
 
   return (
     <main className="min-h-screen bg-black text-white">
       <SiteNav>
         <Link href="/library" className="text-sm text-white/70 transition-colors duration-150 hover:text-white">Library</Link>
-        {generation.status === "complete" && audioUrl && (
-          <DownloadButton audioUrl={audioUrl} title={generation.title ?? generation.topic} label="MP3" />
+        {generation.status === "complete" && audio && (
+          <DownloadButton audioUrl={audio.audioUrl} title={generation.title ?? generation.topic} label="MP3" />
         )}
         {generation.status === "complete" && generation.fullScript && (
           <ScriptDownloadButton script={generation.fullScript} title={generation.title ?? generation.topic} />
@@ -59,10 +59,13 @@ export default async function ListenPage({ params }: { params: Promise<{ id: str
           </p>
         </div>
 
-        {audioUrl ? (
+        {audio ? (
           <div className="mb-10">
             <AudioPlayer
-              src={audioUrl}
+              src={audio.audioUrl}
+              expiresAt={audio.expiresAt}
+              refreshUrl={`/api/generations/${id}/audio-url`}
+              playbackPositionUrl={`/api/generations/${id}/playback-position`}
               durationSeconds={generation.audioDurationSeconds}
               chapters={buildChapterMarks(chapters, generation.audioDurationSeconds)}
             />
