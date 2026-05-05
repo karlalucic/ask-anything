@@ -3,7 +3,7 @@ import { User } from "lucide-react";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 import { buttonVariants } from "@/components/ui/button";
-import { GenerationCard } from "@/components/generation-card";
+import { HideableGenerationCard } from "@/components/hideable-generation-card";
 import { SiteNav } from "@/components/site-nav";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -20,18 +20,30 @@ export default async function LibraryPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/library");
 
+  const { data: hiddenRows } = await supabase
+    .from("library_hidden_items")
+    .select("generation_id")
+    .eq("user_id", user.id);
+
+  const hiddenGenerationIds = new Set((hiddenRows ?? []).map((row) => row.generation_id as string));
+
   // Library cards only render title/status/duration/timestamp/stage_progress.
   // Skip the heavy columns (full_script, outline, style_*, sources_config) —
   // they only matter on the detail page.
-  const { data } = await supabase
+  let generationsQuery = supabase
     .from("generations")
     .select("id, title, topic, duration, audio_duration_seconds, status, stage_progress, created_at")
     .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(100);
+    .order("created_at", { ascending: false });
+
+  if (hiddenGenerationIds.size > 0) {
+    generationsQuery = generationsQuery.not("id", "in", `(${Array.from(hiddenGenerationIds).join(",")})`);
+  }
+
+  const { data } = await generationsQuery.limit(100);
 
   const generations = (data ?? []).map(toGeneration);
-  const sharedItems = await getSharedLibraryItems(user.id);
+  const sharedItems = await getSharedLibraryItems(user.id, hiddenGenerationIds);
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -66,7 +78,7 @@ export default async function LibraryPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {generations.map((g) => <GenerationCard key={g.id} generation={g} />)}
+                {generations.map((g) => <HideableGenerationCard key={g.id} generation={g} />)}
               </div>
             )}
           </TabsContent>
@@ -79,7 +91,7 @@ export default async function LibraryPage() {
             ) : (
               <div className="space-y-3">
                 {sharedItems.map((item) => (
-                  <GenerationCard
+                  <HideableGenerationCard
                     key={item.generation.id}
                     generation={item.generation}
                     sharedBy={item.sharedBy}
@@ -94,7 +106,10 @@ export default async function LibraryPage() {
   );
 }
 
-async function getSharedLibraryItems(userId: string): Promise<SharedLibraryItem[]> {
+async function getSharedLibraryItems(
+  userId: string,
+  hiddenGenerationIds: Set<string>,
+): Promise<SharedLibraryItem[]> {
   const serviceClient = createSupabaseServiceClient();
   const { data: shares } = await serviceClient
     .from("generation_shares")
@@ -104,7 +119,8 @@ async function getSharedLibraryItems(userId: string): Promise<SharedLibraryItem[
     .order("created_at", { ascending: false })
     .limit(100);
 
-  const generationIds = (shares ?? []).map((share) => share.generation_id as string);
+  const visibleShares = (shares ?? []).filter((share) => !hiddenGenerationIds.has(share.generation_id as string));
+  const generationIds = visibleShares.map((share) => share.generation_id as string);
   if (generationIds.length === 0) return [];
 
   const [{ data: sharedGenerations }, { data: owners }] = await Promise.all([
@@ -116,13 +132,13 @@ async function getSharedLibraryItems(userId: string): Promise<SharedLibraryItem[
     serviceClient
       .from("profiles")
       .select("id, display_name")
-      .in("id", Array.from(new Set((shares ?? []).map((share) => share.owner_id as string)))),
+      .in("id", Array.from(new Set(visibleShares.map((share) => share.owner_id as string)))),
   ]);
 
   const generationsById = new Map((sharedGenerations ?? []).map((row) => [row.id as string, toGeneration(row)]));
   const ownersById = new Map((owners ?? []).map((owner) => [owner.id as string, owner.display_name as string | null]));
 
-  return (shares ?? [])
+  return visibleShares
     .map((share) => {
       const generation = generationsById.get(share.generation_id as string);
       if (!generation) return null;
