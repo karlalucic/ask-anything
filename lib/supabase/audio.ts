@@ -1,15 +1,15 @@
 import { createSupabaseServiceClient } from "./server";
+import type { AudioUrlResponse } from "@/lib/types";
 
-// Generations are capped at 60 minutes; 90 bounds a worst-case listening
-// session with seek/scrub headroom. Signed URLs are unrescindable once minted,
-// so this caps the residual access window after a revoke. We re-mint on every
-// page render, so most listeners never come close to the ceiling.
-const AUDIO_SIGNED_URL_TTL_SECONDS = 90 * 60;
+// Keep signed URLs short-lived and refresh during playback. Signed URLs are
+// unrescindable once minted, so this caps the residual access window after a
+// share revoke while still giving download links enough time to start.
+export const AUDIO_SIGNED_URL_TTL_SECONDS = 30 * 60;
 
-export async function createAudioSignedUrl(
+export async function createAudioSignedUrlResponse(
   audioPath: string,
   options?: { download?: string | boolean },
-): Promise<string> {
+): Promise<AudioUrlResponse> {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase.storage
     .from("audio")
@@ -19,5 +19,16 @@ export async function createAudioSignedUrl(
     throw new Error(`Failed to create signed audio URL: ${error?.message ?? "unknown error"}`);
   }
 
-  return data.signedUrl;
+  return {
+    audioUrl: data.signedUrl,
+    expiresAt: new Date(Date.now() + AUDIO_SIGNED_URL_TTL_SECONDS * 1000).toISOString(),
+  };
+}
+
+export async function createAudioSignedUrl(
+  audioPath: string,
+  options?: { download?: string | boolean },
+): Promise<string> {
+  const { audioUrl } = await createAudioSignedUrlResponse(audioPath, options);
+  return audioUrl;
 }
