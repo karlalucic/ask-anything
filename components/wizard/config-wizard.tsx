@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2, Pause, Play } from "lucide-react";
 import posthog from "posthog-js";
 import { AuthGateModal } from "@/components/auth-gate-modal";
 import { Button } from "@/components/ui/button";
@@ -87,6 +88,11 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
   const [authed, setAuthed] = useState(initialAuthed);
   const [showAuthGate, setShowAuthGate] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [voicePreviewLoading, setVoicePreviewLoading] = useState<VoiceId | null>(null);
+  const [voicePreviewPlaying, setVoicePreviewPlaying] = useState<VoiceId | null>(null);
+  const [voicePreviewError, setVoicePreviewError] = useState("");
+  const voicePreviewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const voicePreviewUrlsRef = useRef<Map<VoiceId, string>>(new Map());
 
   // Hydrate from localStorage on mount (anonymous draft persistence).
   // setState-in-effect is the canonical SSR-safe pattern for localStorage —
@@ -140,6 +146,15 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
       },
     );
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const previewUrls = voicePreviewUrlsRef.current;
+    return () => {
+      voicePreviewAudioRef.current?.pause();
+      previewUrls.forEach((url) => URL.revokeObjectURL(url));
+      previewUrls.clear();
+    };
   }, []);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -276,6 +291,59 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
       return;
     }
     next();
+  }
+
+  async function playVoicePreview(voice: VoiceId) {
+    if (!authed) {
+      setShowAuthGate(true);
+      return;
+    }
+
+    if (voicePreviewPlaying === voice && voicePreviewAudioRef.current) {
+      voicePreviewAudioRef.current.pause();
+      setVoicePreviewPlaying(null);
+      return;
+    }
+
+    setVoicePreviewError("");
+    setVoicePreviewLoading(voice);
+
+    try {
+      let audioUrl = voicePreviewUrlsRef.current.get(voice);
+      if (!audioUrl) {
+        const response = await fetch("/api/voice-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ voice }),
+        });
+
+        if (!response.ok) {
+          const body = await response.json().catch(() => null);
+          throw new Error(body?.error ?? "Could not preview this voice.");
+        }
+
+        audioUrl = URL.createObjectURL(await response.blob());
+        voicePreviewUrlsRef.current.set(voice, audioUrl);
+      }
+
+      voicePreviewAudioRef.current?.pause();
+      const audio = new Audio(audioUrl);
+      voicePreviewAudioRef.current = audio;
+      audio.addEventListener("ended", () => setVoicePreviewPlaying(null), { once: true });
+      audio.addEventListener("error", () => {
+        setVoicePreviewPlaying(null);
+        setVoicePreviewError("Could not play this preview.");
+      }, { once: true });
+
+      setVoicePreviewPlaying(voice);
+      await audio.play();
+      posthog.capture("voice_preview_played", { voice });
+    } catch (err) {
+      setVoicePreviewPlaying(null);
+      setVoicePreviewError(err instanceof Error ? err.message : "Could not preview this voice.");
+    } finally {
+      setVoicePreviewLoading(null);
+    }
   }
 
   return (
@@ -487,21 +555,52 @@ export function ConfigWizard({ initialAuthed }: ConfigWizardProps) {
             <Label className="text-base font-medium text-white">Choose a voice</Label>
             <div className="mt-3 space-y-2">
               {(Object.entries(VOICE_LABELS) as [VoiceId, { label: string; description: string }][]).map(([id, { label, description }]) => (
-                <button
+                <div
                   key={id}
-                  onClick={() => update("voice", id)}
                   className={cn(
-                    "flex w-full items-center justify-between rounded-xl border px-4 py-3.5 text-left transition-all duration-150 focus-visible:ring-1 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+                    "flex w-full items-center gap-3 rounded-xl border p-2 transition-all duration-150",
                     form.voice === id
                       ? "border-white bg-white/10 text-white"
                       : "border-white/10 bg-transparent text-white/60 hover:border-white/30"
                   )}
                 >
-                  <span className="text-sm font-medium">{label}</span>
-                  <span className={`text-sm ${form.voice === id ? "text-white/70" : "text-white/40"}`}>{description}</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => update("voice", id)}
+                    className="flex min-h-11 min-w-0 flex-1 items-center justify-between gap-3 rounded-lg px-2 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+                    aria-pressed={form.voice === id}
+                  >
+                    <span className="text-sm font-medium">{label}</span>
+                    <span className={`text-right text-sm ${form.voice === id ? "text-white/70" : "text-white/40"}`}>{description}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void playVoicePreview(id)}
+                    disabled={voicePreviewLoading !== null}
+                    className={cn(
+                      "flex size-11 shrink-0 items-center justify-center rounded-full border transition-colors duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-black disabled:opacity-50",
+                      voicePreviewPlaying === id
+                        ? "border-white bg-white text-black"
+                        : "border-white/15 bg-white/5 text-white/70 hover:border-white/40 hover:text-white"
+                    )}
+                    aria-label={`${voicePreviewPlaying === id ? "Pause" : "Preview"} ${label}`}
+                  >
+                    {voicePreviewLoading === id ? (
+                      <Loader2 aria-hidden className="size-4 animate-spin" />
+                    ) : voicePreviewPlaying === id ? (
+                      <Pause aria-hidden className="size-4" />
+                    ) : (
+                      <Play aria-hidden className="ml-0.5 size-4" />
+                    )}
+                  </button>
+                </div>
               ))}
             </div>
+            {voicePreviewError && (
+              <p className="mt-3 rounded-xl border border-red-500/30 bg-red-950/40 p-4 text-sm text-red-400">
+                {voicePreviewError}
+              </p>
+            )}
           </div>
 
         </div>

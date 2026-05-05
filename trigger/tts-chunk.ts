@@ -64,10 +64,9 @@ export const ttsChunk = task({
         },
         body: JSON.stringify({
           text,
-          voice_id: voice.charAt(0).toUpperCase() + voice.slice(1), // "eve" → "Eve"
-          // 24 kHz is xAI's documented default (TTS-guide.md, section 7) and
-          // the speech-optimized path; 44.1 kHz was burning extra synthesis
-          // time for sample resolution that's audibly identical on narration.
+          voice_id: voice,
+          // 24 kHz is xAI's documented default. Higher sample rates were
+          // burning extra synthesis time for detail that's negligible here.
           output_format: { codec: "mp3", sample_rate: 24000, bit_rate: 128000 },
           language: "en",
         }),
