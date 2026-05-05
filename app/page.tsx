@@ -1,12 +1,11 @@
 import Link from "next/link";
 
+import { HeroBackdrop } from "@/components/hero-backdrop";
 import { IntroModal } from "@/components/intro-modal";
 import { SiteNav } from "@/components/site-nav";
 import { buttonVariants } from "@/components/ui/button";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
-
-const HERO_VIDEO = "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260314_131748_f2ca2a28-fed7-44c8-b9a9-bd9acdd5ec31.mp4";
 
 const SAMPLE_PODCASTS = [
   { title: "How my mortgage actually works", date: "Apr 12", duration: "22 min", status: "complete" },
@@ -152,24 +151,6 @@ function HeroSection() {
         </div>
       </div>
     </section>
-  );
-}
-
-function HeroBackdrop() {
-  return (
-    <div className="absolute inset-0 z-0" aria-hidden>
-      <video
-        autoPlay
-        loop
-        muted
-        playsInline
-        preload="metadata"
-        className="h-full w-full object-cover object-top opacity-99"
-        src={HERO_VIDEO}
-      />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.75)_100%),linear-gradient(to_bottom,transparent_60%,#000_100%)]" />
-      <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-black" />
-    </div>
   );
 }
 
