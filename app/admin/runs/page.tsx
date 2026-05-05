@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AdminNav } from "@/app/admin/admin-nav";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { isAdminUser } from "@/lib/admin";
@@ -122,24 +123,12 @@ export default async function AdminRunsPage({
 
   return (
     <main className="min-h-screen bg-black text-white">
-      <nav className="px-6 pt-6">
-        <div className="liquid-glass mx-auto flex max-w-6xl items-center justify-between rounded-full px-6 py-3">
-          <span className="font-mono text-sm text-white/40">admin / runs</span>
-          <div className="flex items-center gap-3">
-            <Link href="/admin/cost" className="text-sm text-white/50 transition-colors duration-150 hover:text-white">
-              Cost
-            </Link>
-            <Link href="/account" className="text-sm text-white/50 transition-colors duration-150 hover:text-white">
-              Account
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <AdminNav active="runs" />
 
       <div className="mx-auto max-w-6xl space-y-8 px-6 py-10">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-normal leading-snug text-white">All generations</h1>
+            <h1 className="text-2xl font-normal leading-snug text-white">Generation library</h1>
             <p className="mt-1 text-sm text-white/40">
               Browse every generation, open the detail page, play completed audio, and inspect the final script.
             </p>

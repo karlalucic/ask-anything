@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AdminNav } from "@/app/admin/admin-nav";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 import { isAdminUser } from "@/lib/admin";
 
@@ -146,19 +147,14 @@ export default async function AdminCostPage() {
 
   return (
     <main className="min-h-screen bg-black text-white">
-      <nav className="px-6 pt-6">
-        <div className="liquid-glass mx-auto flex max-w-5xl items-center justify-between rounded-full px-6 py-3">
-          <span className="font-mono text-sm text-white/40">admin / cost</span>
-          <div className="flex items-center gap-3">
-            <Link href="/admin/runs" className="text-sm text-white/50 transition-colors duration-150 hover:text-white">
-              Runs
-            </Link>
-            <span className="text-xs text-white/30">last 50 generations + 24h unattached</span>
-          </div>
-        </div>
-      </nav>
+      <AdminNav active="costs" />
 
       <div className="mx-auto max-w-5xl space-y-10 px-6 py-10">
+        <div>
+          <h1 className="text-2xl font-normal leading-snug text-white">Cost dashboard</h1>
+          <p className="mt-2 text-sm text-white/40">Last 50 generations plus unattached style events from the last 24 hours.</p>
+        </div>
+
         {/* Roll-ups */}
         <section className="grid grid-cols-3 gap-3">
           {[
@@ -246,6 +242,12 @@ export default async function AdminCostPage() {
                     <span className="text-xs text-white/40 shrink-0">{g.duration}m</span>
                     <span className="text-xs text-white/40 shrink-0 w-20 truncate">{g.status}</span>
                     <span className="font-mono text-sm text-white shrink-0 w-20 text-right">{fmtUsd(total)}</span>
+                    <Link
+                      href={`/admin/runs/${g.id}`}
+                      className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs text-white/50 transition-colors duration-150 hover:bg-white/5 hover:text-white"
+                    >
+                      Open
+                    </Link>
                   </div>
                   {Object.keys(stages).length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-2 pl-[5.5rem]">
@@ -317,36 +319,6 @@ export default async function AdminCostPage() {
           </div>
         </section>
 
-        {/* Recent raw events */}
-        <section>
-          <h3 className="mb-3 text-sm font-medium text-white/70">Recent events ({usage.length})</h3>
-          <div className="liquid-glass max-h-[600px] divide-y divide-white/10 overflow-y-auto rounded-xl">
-            {usage.slice(0, 200).map((e) => {
-              const eventUserId = e.user_id ?? generationById.get(e.generation_id ?? "")?.user_id ?? null;
-              return (
-                <div key={e.id} className="flex items-baseline gap-3 px-4 py-2 text-xs">
-                  <span className="font-mono text-white/20 shrink-0 w-12">{e.id}</span>
-                  <span className="font-mono text-white/40 shrink-0 w-16 truncate">{e.stage}</span>
-                  <span className="font-mono text-white/30 shrink-0 w-40 truncate">{userLabel(profileById.get(eventUserId ?? ""), eventUserId)}</span>
-                  <span className="font-mono text-white/30 shrink-0 w-16 truncate">{e.provider}</span>
-                  <span className="font-mono text-white/30 shrink-0 w-32 truncate">{e.model}</span>
-                  {e.chapter_idx != null && <span className="text-white/30 shrink-0 w-8">ch{e.chapter_idx}</span>}
-                  <span className="font-mono text-white/40 shrink-0 w-20 text-right">
-                    {e.input_tokens ?? "—"}/{e.output_tokens ?? "—"}
-                  </span>
-                  {e.tool_calls > 0 && <span className="text-white/30 shrink-0">{e.tool_calls}t</span>}
-                  {e.web_search_requests > 0 && <span className="text-white/30 shrink-0">{e.web_search_requests}ws</span>}
-                  {e.tts_characters != null && <span className="text-white/30 shrink-0">{e.tts_characters}c</span>}
-                  {e.duration_ms != null && <span className="text-white/20 shrink-0 w-16 text-right">{e.duration_ms}ms</span>}
-                  <span className="font-mono text-white shrink-0 w-20 text-right">{fmtUsd(Number(e.cost_usd))}</span>
-                </div>
-              );
-            })}
-            {usage.length === 0 && (
-              <div className="px-4 py-3 text-xs text-white/40">No usage events yet — generate a podcast to start populating this view.</div>
-            )}
-          </div>
-        </section>
       </div>
     </main>
   );

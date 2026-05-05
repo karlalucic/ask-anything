@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { AdminNav } from "@/app/admin/admin-nav";
 import { AudioPlayer } from "@/components/audio-player";
 import { DownloadButton } from "@/components/download-button";
 import { ScriptDisplay } from "@/components/script-display";
@@ -50,13 +51,6 @@ export default async function AdminRunPage({ params }: { params: Promise<{ id: s
 
   if (!gen) notFound();
 
-  const { data: events } = await serviceClient
-    .from("run_events")
-    .select("*")
-    .eq("generation_id", id)
-    .order("created_at", { ascending: true })
-    .limit(500);
-
   const generation = toGenerationWithChapters(gen);
   const [{ data: profile }, { data: usageRows }] = await Promise.all([
     serviceClient
@@ -77,26 +71,18 @@ export default async function AdminRunPage({ params }: { params: Promise<{ id: s
 
   return (
     <main className="min-h-screen bg-black text-white">
-      <nav className="px-6 pt-6">
-        <div className="liquid-glass mx-auto flex max-w-4xl items-center justify-between rounded-full px-6 py-3">
-          <span className="font-mono text-sm text-white/40">admin / runs / {id.slice(0, 8)}</span>
-          <div className="flex items-center gap-3">
-            <Link href="/admin/runs" className="text-sm text-white/50 transition-colors duration-150 hover:text-white">
-              All runs
-            </Link>
-            {generation.triggerRunId && (
-              <a
-                href={`https://cloud.trigger.dev/runs/${generation.triggerRunId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-white/50 transition-colors duration-150 hover:text-white"
-              >
-                Trigger.dev
-              </a>
-            )}
-          </div>
-        </div>
-      </nav>
+      <AdminNav active="runs">
+        {generation.triggerRunId && (
+          <a
+            href={`https://cloud.trigger.dev/runs/${generation.triggerRunId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-full px-4 py-2 text-sm text-white/60 transition-colors duration-150 hover:bg-white/5 hover:text-white"
+          >
+            Trigger.dev
+          </a>
+        )}
+      </AdminNav>
 
       <div className="mx-auto max-w-4xl space-y-10 px-6 py-10">
         <section>
@@ -189,36 +175,6 @@ export default async function AdminRunPage({ params }: { params: Promise<{ id: s
             </div>
           </section>
         )}
-
-        {/* Run events timeline */}
-        <section>
-          <h3 className="text-sm font-semibold mb-3 text-white">Run events ({events?.length ?? 0})</h3>
-          <div className="liquid-glass max-h-[600px] divide-y divide-white/10 overflow-y-auto rounded-xl">
-            {((events ?? []) as unknown[]).map((ev) => {
-              const e = ev as { id: number; kind: string; stage: string; provider?: string; chapter_idx?: number; duration_ms?: number; error?: unknown; created_at: string };
-              return (
-              <div key={e.id} className={`px-4 py-3 flex items-start gap-3 ${e.kind === "error" ? "bg-red-500/10" : ""}`}>
-                <span className="text-xs text-white/20 tabular-nums w-6 shrink-0">{e.id}</span>
-                <div className="flex-1 min-w-0 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-mono ${e.kind === "error" ? "text-red-400" : "text-white/60"}`}>{e.stage}</span>
-                    {e.provider && <span className="text-xs text-white/40">{e.provider}</span>}
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${e.kind === "error" ? "bg-red-500/10 text-red-400" : "bg-white/10 text-white/50"}`}>{e.kind}</span>
-                    {e.chapter_idx != null && <span className="text-xs text-white/40">ch{e.chapter_idx}</span>}
-                    {e.duration_ms && <span className="text-xs text-white/20">{e.duration_ms}ms</span>}
-                  </div>
-                  {e.error != null && (
-                    <pre className="text-xs text-red-400 bg-red-950/40 rounded p-2 overflow-auto">
-                      {JSON.stringify(e.error, null, 2)}
-                    </pre>
-                  )}
-                </div>
-                <span className="text-xs text-white/20 shrink-0">{new Date(e.created_at).toLocaleTimeString()}</span>
-              </div>
-              );
-            })}
-          </div>
-        </section>
 
         {/* Config snapshot */}
         <section>
