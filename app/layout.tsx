@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Instrument_Serif, Inter } from "next/font/google";
 import { PostHogIdentifier } from "@/components/posthog-identifier";
+import { MobileWebVitals } from "@/features/observability/mobile-web-vitals";
 import "./globals.css";
 
 const inter = Inter({
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${inter.variable} ${instrumentSerif.variable} h-full antialiased`}>
       <body className="min-h-full bg-background text-foreground font-sans">
         <PostHogIdentifier />
+        <MobileWebVitals />
         {children}
       </body>
     </html>

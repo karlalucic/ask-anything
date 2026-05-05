@@ -1,32 +1,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import type { Generation, GenerationStatus } from "@/lib/types";
-
-const STATUS_LABEL: Record<GenerationStatus, string> = {
-  queued: "queued",
-  outlining: "outlining",
-  researching: "researching",
-  drafting: "drafting",
-  aggregating: "polishing",
-  synthesizing: "narrating",
-  complete: "complete",
-  failed: "failed",
-  canceling: "canceling",
-  canceled: "canceled",
-};
-
-const STATUS_VARIANT: Record<GenerationStatus, "default" | "secondary" | "destructive" | "outline"> = {
-  queued: "outline",
-  outlining: "secondary",
-  researching: "secondary",
-  drafting: "secondary",
-  aggregating: "secondary",
-  synthesizing: "secondary",
-  complete: "default",
-  failed: "destructive",
-  canceling: "outline",
-  canceled: "outline",
-};
+import { getGenerationUiState, isTerminalGenerationStatus } from "@/features/generations/state-machine";
+import type { Generation } from "@/lib/types";
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return "";
@@ -40,8 +15,9 @@ function formatDate(iso: string): string {
 }
 
 export function GenerationCard({ generation, sharedBy }: { generation: Generation; sharedBy?: string | null }) {
-  const isTerminal = ["complete", "failed", "canceled"].includes(generation.status);
+  const isTerminal = isTerminalGenerationStatus(generation.status);
   const isActive = !isTerminal;
+  const status = getGenerationUiState(generation.status);
 
   return (
     <Link
@@ -76,8 +52,8 @@ export function GenerationCard({ generation, sharedBy }: { generation: Generatio
             )}
           </div>
         </div>
-        <Badge variant={STATUS_VARIANT[generation.status]} className="shrink-0">
-          {STATUS_LABEL[generation.status]}
+        <Badge variant={status.badgeVariant} className="shrink-0">
+          {status.label}
         </Badge>
       </div>
     </Link>

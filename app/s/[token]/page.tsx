@@ -1,17 +1,16 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import type { Metadata } from "next";
-import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { AudioPlayer } from "@/components/audio-player";
 import { DownloadButton } from "@/components/download-button";
 import { FeedbackButtons } from "@/components/feedback-buttons";
 import { ScriptDisplay } from "@/components/script-display";
 import { ScriptDownloadButton } from "@/components/script-download-button";
 import { SiteNav } from "@/components/site-nav";
-import { toGenerationWithChapters } from "@/lib/supabase/mappers";
 import { captureServerEvent } from "@/lib/posthog-server";
 import { createAudioSignedUrlResponse } from "@/lib/supabase/audio";
 import { buildChapterMarks } from "@/lib/chapter-marks";
+import { getPublicSharedGeneration } from "@/features/playback/server";
 
 export const metadata: Metadata = {
   title: "Shared podcast",
@@ -24,29 +23,8 @@ export const metadata: Metadata = {
 export default async function SharedListenPage({ params }: { params: Promise<{ token: string }> }) {
   await connection();
   const { token } = await params;
-  const supabase = createSupabaseServiceClient();
-
-  const { data: link } = await supabase
-    .from("share_links")
-    .select("generation_id")
-    .eq("token", token)
-    .is("revoked_at", null)
-    .single();
-
-  if (!link) notFound();
-
-  const { data } = await supabase
-    .from("generations")
-    .select("*, chapters(*)")
-    .eq("id", link.generation_id)
-    .eq("status", "complete")
-    .eq("visibility", "public")
-    .order("idx", { referencedTable: "chapters", ascending: true })
-    .single();
-
-  if (!data) notFound();
-
-  const generation = toGenerationWithChapters(data);
+  const generation = await getPublicSharedGeneration(token);
+  if (!generation) notFound();
 
   captureServerEvent({
     distinctId: `share:${generation.id}`,
