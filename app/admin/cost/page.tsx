@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 import { isAdminUser } from "@/lib/admin";
@@ -148,7 +149,12 @@ export default async function AdminCostPage() {
       <nav className="px-6 pt-6">
         <div className="liquid-glass mx-auto flex max-w-5xl items-center justify-between rounded-full px-6 py-3">
           <span className="font-mono text-sm text-white/40">admin / cost</span>
-          <span className="text-xs text-white/30">last 50 generations + 24h unattached</span>
+          <div className="flex items-center gap-3">
+            <Link href="/admin/runs" className="text-sm text-white/50 transition-colors duration-150 hover:text-white">
+              Runs
+            </Link>
+            <span className="text-xs text-white/30">last 50 generations + 24h unattached</span>
+          </div>
         </div>
       </nav>
 

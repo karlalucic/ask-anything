@@ -1,7 +1,37 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { AudioPlayer } from "@/components/audio-player";
+import { DownloadButton } from "@/components/download-button";
+import { ScriptDisplay } from "@/components/script-display";
+import { buttonVariants } from "@/components/ui/button";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 import { toGenerationWithChapters } from "@/lib/supabase/mappers";
 import { isAdminUser } from "@/lib/admin";
+import { createAudioSignedUrl } from "@/lib/supabase/audio";
+import { buildChapterMarks } from "@/lib/chapter-marks";
+import { cn } from "@/lib/utils";
+
+interface ProfileRow {
+  id: string;
+  email: string | null;
+  display_name: string | null;
+}
+
+interface UsageCostRow {
+  cost_usd: number;
+}
+
+function fmtUsd(n: number): string {
+  if (!n) return "$0.00";
+  if (n < 0.01) return `$${n.toFixed(4)}`;
+  return `$${n.toFixed(2)}`;
+}
+
+function userLabel(profile: ProfileRow | null | undefined, userId: string): string {
+  if (profile?.email) return profile.email;
+  if (profile?.display_name) return profile.display_name;
+  return `user:${userId.slice(0, 8)}`;
+}
 
 export default async function AdminRunPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -28,35 +58,97 @@ export default async function AdminRunPage({ params }: { params: Promise<{ id: s
     .limit(500);
 
   const generation = toGenerationWithChapters(gen);
+  const [{ data: profile }, { data: usageRows }] = await Promise.all([
+    serviceClient
+      .from("profiles")
+      .select("id, email, display_name")
+      .eq("id", generation.userId)
+      .maybeSingle(),
+    serviceClient
+      .from("provider_usage_events")
+      .select("cost_usd")
+      .eq("generation_id", generation.id),
+  ]);
+  const generationCost = ((usageRows ?? []) as UsageCostRow[]).reduce((sum, row) => sum + Number(row.cost_usd), 0);
+  const audioUrl = generation.status === "complete" && generation.audioPath
+    ? await createAudioSignedUrl(generation.audioPath)
+    : null;
+  const title = generation.title ?? generation.topic;
 
   return (
     <main className="min-h-screen bg-black text-white">
       <nav className="px-6 pt-6">
         <div className="liquid-glass mx-auto flex max-w-4xl items-center justify-between rounded-full px-6 py-3">
-          <span className="font-mono text-sm text-white/40">admin / runs / {id}</span>
-          {generation.triggerRunId && (
-            <a
-              href={`https://cloud.trigger.dev/runs/${generation.triggerRunId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-white/50 transition-colors duration-150 hover:text-white"
-            >
-              Open in Trigger.dev
-            </a>
-          )}
+          <span className="font-mono text-sm text-white/40">admin / runs / {id.slice(0, 8)}</span>
+          <div className="flex items-center gap-3">
+            <Link href="/admin/runs" className="text-sm text-white/50 transition-colors duration-150 hover:text-white">
+              All runs
+            </Link>
+            {generation.triggerRunId && (
+              <a
+                href={`https://cloud.trigger.dev/runs/${generation.triggerRunId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-white/50 transition-colors duration-150 hover:text-white"
+              >
+                Trigger.dev
+              </a>
+            )}
+          </div>
         </div>
       </nav>
 
       <div className="mx-auto max-w-4xl space-y-10 px-6 py-10">
+        <section>
+          <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-normal leading-snug text-white">{title}</h1>
+              <p className="mt-2 text-sm text-white/40">{userLabel(profile as ProfileRow | null, generation.userId)}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {audioUrl && <DownloadButton audioUrl={audioUrl} title={title} label="MP3" />}
+              <Link href="/admin/cost" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                Cost dashboard
+              </Link>
+            </div>
+          </div>
+
+          {audioUrl ? (
+            <AudioPlayer
+              src={audioUrl}
+              durationSeconds={generation.audioDurationSeconds}
+              chapters={buildChapterMarks(generation.chapters ?? [], generation.audioDurationSeconds)}
+            />
+          ) : (
+            <div className="liquid-glass rounded-2xl px-6 py-8">
+              <p className="text-sm text-white/50">
+                No playable audio yet. This generation is currently <span className="font-mono text-white/70">{generation.status}</span>.
+              </p>
+            </div>
+          )}
+
+          {generation.fullScript ? (
+            <ScriptDisplay script={generation.fullScript} title={title} />
+          ) : (
+            <div className="mt-8 border-t border-white/10 pt-8">
+              <p className="text-sm text-white/35">No final script is saved for this generation.</p>
+            </div>
+          )}
+        </section>
+
         {/* Generation summary */}
         <section>
-          <h2 className="mb-4 text-lg font-medium text-white">{generation.title ?? generation.topic}</h2>
+          <h2 className="mb-4 text-lg font-medium text-white">Generation details</h2>
           <div className="liquid-glass divide-y divide-white/10 rounded-xl">
             {[
               ["ID", generation.id],
+              ["User", userLabel(profile as ProfileRow | null, generation.userId)],
+              ["User ID", generation.userId],
               ["Status", generation.status],
               ["Topic", generation.topic],
               ["Duration", generation.duration],
+              ["Audio duration", generation.audioDurationSeconds ? `${generation.audioDurationSeconds}s` : "—"],
+              ["Cost", fmtUsd(generationCost)],
               ["Created", generation.createdAt],
               ["Completed", generation.completedAt ?? "—"],
               ["Trigger Run ID", generation.triggerRunId ?? "—"],

@@ -45,7 +45,7 @@ export default async function AccountPage() {
               Open library
             </Link>
             {isAdmin && (
-              <Link href="/admin/cost" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+              <Link href="/admin/runs" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
                 Open admin
               </Link>
             )}
