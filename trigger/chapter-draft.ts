@@ -55,7 +55,7 @@ export const chapterDraft = task({
       provider: "anthropic",
       kind: "call",
       attempt: 1,
-      payload: { model: "claude-opus-4-7", targetWords: chapter.targetWords },
+      payload: { model: "claude-opus-4-8", targetWords: chapter.targetWords },
     });
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -75,7 +75,7 @@ export const chapterDraft = task({
 
     try {
       response = await anthropic.messages.create({
-        model: "claude-opus-4-7",
+        model: "claude-opus-4-8",
         max_tokens: 8192,
         // Style card + instructions are identical for every chapter in this
         // generation, so cache the system prefix and chapters 2..N read it back
@@ -118,7 +118,7 @@ export const chapterDraft = task({
       chapterIdx,
       stage: "draft",
       provider: "anthropic",
-      model: "claude-opus-4-7",
+      model: "claude-opus-4-8",
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
       cachedInputTokens: response.usage.cache_read_input_tokens ?? 0,

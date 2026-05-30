@@ -311,7 +311,7 @@ This app picked Trigger.dev. The framing is: "the orchestration code lives in th
 For long-form prose, citation handling, and tool use, Claude has been consistently strong. The current pipeline uses three model tiers:
 
 - **Sonnet 4.6** — outline, research, aggregation. Fast, capable, $3/$15 per 1M tokens (input/output).
-- **Opus 4.7** — chapter drafting. Slower, the highest-quality writing, $5/$25 per 1M tokens.
+- **Opus 4.8** — chapter drafting. Slower, the highest-quality writing, $5/$25 per 1M tokens.
 - **Haiku 4.5** — style card analysis. Cheapest, used for small focused tasks, $1/$5 per 1M tokens.
 
 Why Anthropic vs OpenAI vs Google: **product fit + the web_search tool**. Claude's `web_search_20250305` tool lets the model do its own searches inside an agentic loop — convenient, though expensive (see the cost story). For a quality-first audio briefing, Claude's prose is currently the bar to beat.

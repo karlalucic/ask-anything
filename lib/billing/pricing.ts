@@ -20,8 +20,8 @@ const ANTHROPIC_RATES: Record<string, AnthropicRate> = {
   // Sonnet 4.6
   "claude-sonnet-4-6": { input: 3, output: 15, cachedRead: 0.3, cacheCreation: 3.75 },
   "claude-sonnet-4-6-20250514": { input: 3, output: 15, cachedRead: 0.3, cacheCreation: 3.75 },
-  // Opus 4.7 — current Anthropic pricing per Codex review
-  "claude-opus-4-7": { input: 5, output: 25, cachedRead: 0.5, cacheCreation: 6.25 },
+  // Opus 4.8 — current Anthropic pricing per Codex review
+  "claude-opus-4-8": { input: 5, output: 25, cachedRead: 0.5, cacheCreation: 6.25 },
   // Haiku 4.5
   "claude-haiku-4-5-20251001": { input: 1, output: 5, cachedRead: 0.1, cacheCreation: 1.25 },
 };
