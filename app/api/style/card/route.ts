@@ -8,7 +8,7 @@ import { serverError } from "@/lib/api-errors";
 
 const bodySchema = z.object({
   styleInput: z.string().min(1).max(200),
-  topic: z.string().min(1).max(1500),
+  topic: z.string().min(1).max(3000),
   familiarity: z.enum(["beginner", "intermediate", "advanced"]),
   intent: z.enum(["curious", "work", "comparing", "deep_dive"]),
 });

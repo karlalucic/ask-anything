@@ -13,7 +13,7 @@ const listQuerySchema = z.object({
 });
 
 const bodySchema = z.object({
-  topic: z.string().min(1).max(1500),
+  topic: z.string().min(1).max(3000),
   duration: z.number().int().min(5).max(60),
   familiarity: z.enum(["beginner", "intermediate", "advanced"]),
   intent: z.enum(["curious", "work", "comparing", "deep_dive"]),
