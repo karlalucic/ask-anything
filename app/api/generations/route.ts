@@ -13,12 +13,12 @@ const listQuerySchema = z.object({
 });
 
 const bodySchema = z.object({
-  topic: z.string().min(1).max(3000),
+  topic: z.string().min(1).max(5000),
   duration: z.number().int().min(5).max(60),
   familiarity: z.enum(["beginner", "intermediate", "advanced"]),
   intent: z.enum(["curious", "work", "comparing", "deep_dive"]),
   voice: z.enum(["eve", "ara", "rex", "sal", "leo"]),
-  styleInput: z.string().min(1).max(200),
+  styleInput: z.string().min(1).max(300),
   styleCard: z.object({
     openingPattern: z.string().max(1000),
     chapterShape: z.string().max(1000),

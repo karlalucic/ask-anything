@@ -7,8 +7,8 @@ import { recordProviderUsage } from "@/lib/usage/record";
 import { serverError } from "@/lib/api-errors";
 
 const bodySchema = z.object({
-  styleInput: z.string().min(1).max(200),
-  topic: z.string().min(1).max(3000),
+  styleInput: z.string().min(1).max(300),
+  topic: z.string().min(1).max(5000),
   familiarity: z.enum(["beginner", "intermediate", "advanced"]),
   intent: z.enum(["curious", "work", "comparing", "deep_dive"]),
 });
